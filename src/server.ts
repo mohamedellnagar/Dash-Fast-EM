@@ -2,11 +2,14 @@ import { createApp } from './app';
 import { env } from './config/env';
 import { logger } from './lib/logger';
 import { disconnectPrisma } from './db/prisma';
+import { ensureBootstrap } from './db/bootstrap';
 
 const app = createApp();
 
 const server = app.listen(env.port, () => {
   logger.info({ port: env.port, env: env.nodeEnv }, 'FastTest dashboard listening');
+  // First-boot bootstrap (permissions, roles, admin) — idempotent, non-blocking.
+  void ensureBootstrap();
 });
 
 async function shutdown(signal: string) {
