@@ -1,4 +1,5 @@
 import os from 'os';
+import http from 'http';
 import { v4 as uuid } from 'uuid';
 import { env } from '../config/env';
 import { prisma } from '../db/prisma';
@@ -68,7 +69,25 @@ export async function runSchedulerTick(now: () => number = () => Date.now()): Pr
   ]);
 }
 
+// Tiny health endpoint so container/orchestrator health checks pass. The worker
+// has no HTTP API, but platforms (EasyPanel/Swarm) probe /health and would
+// restart the container in a loop without a 200 response.
+function startHealthServer(): void {
+  const server = http.createServer((req, res) => {
+    if (req.url === '/health' || req.url === '/healthz') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'ok', role: 'worker', worker: WORKER_ID }));
+    } else {
+      res.writeHead(404);
+      res.end();
+    }
+  });
+  server.on('error', (e) => logger.warn({ err: (e as Error).message }, 'worker health server error'));
+  server.listen(env.port, () => logger.info({ port: env.port }, 'worker health endpoint listening'));
+}
+
 async function main(): Promise<void> {
+  startHealthServer();
   await registerWorker(WORKER_ID);
   logger.info({ worker: WORKER_ID, concurrency: env.sync.concurrency }, 'sync worker started (durable queue)');
 
