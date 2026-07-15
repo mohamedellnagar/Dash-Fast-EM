@@ -1,0 +1,892 @@
+// FastTest Live Monitoring & Analytics Dashboard — data model.
+//
+// PORTABILITY NOTE
+// ----------------
+// The active provider is MySQL. The schema stays largely provider-agnostic:
+//   * No native DB enums — statuses are String columns validated at the
+//     application layer (see src/lib/enums.ts).
+//   * Raw API payloads and large JSON/config/error fields use @db.Text /
+//     @db.LongText so MySQL does not truncate them at the varchar(191)
+//     default. (These native attributes are MySQL-specific; if switching
+//     back to SQLite/Postgres, drop the @db.* annotations.)
+//   * All money/score numerics use Float.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------
+// AUTH / RBAC
+// ---------------------------------------------------------------------------
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String
+  fullName     String
+  isActive     Boolean   @default(true)
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+  deletedAt    DateTime?
+
+  userRoles    UserRole[]
+  schoolScopes UserSchoolScope[]
+  auditLogs    AuditLog[]
+  importJobs   ImportJob[]
+  savedViews         SavedView[]           @relation("UserSavedViews")
+  tablePreferences   UserTablePreference[] @relation("UserTablePrefs")
+  exportJobs         ExportJob[]           @relation("UserExportJobs")
+  attentionAssigned  AttentionItem[]       @relation("UserAttentionAssigned")
+  attentionNotes     AttentionNote[]       @relation("UserAttentionNotes")
+  alertsAssigned     SystemAlert[]         @relation("UserAlertsAssigned")
+  alertNotes         AlertNote[]           @relation("UserAlertNotes")
+
+  @@index([isActive])
+}
+
+model Role {
+  id          String   @id @default(uuid())
+  key         String   @unique // ADMINISTRATOR, OPERATIONS, ASSESSMENT_TEAM, SCHOOL_USER, VIEWER
+  name        String
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  userRoles       UserRole[]
+  rolePermissions RolePermission[]
+}
+
+model Permission {
+  id          String   @id @default(uuid())
+  key         String   @unique // e.g. dashboard:view, integration:manage, import:run
+  description String?
+  createdAt   DateTime @default(now())
+
+  rolePermissions RolePermission[]
+}
+
+model RolePermission {
+  roleId       String
+  permissionId String
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, permissionId])
+}
+
+model UserRole {
+  userId String
+  roleId String
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+}
+
+// School-level scoping for SCHOOL_USER role.
+model UserSchoolScope {
+  userId   String
+  schoolId String
+  user     User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  school   School @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+
+  @@id([userId, schoolId])
+}
+
+// ---------------------------------------------------------------------------
+// REFERENCE / SOURCE DATA
+// ---------------------------------------------------------------------------
+
+model School {
+  id         String    @id @default(uuid())
+  externalId String    @unique // maps to source SchoolId
+  name       String
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+  deletedAt  DateTime?
+
+  students     Student[]
+  scopes       UserSchoolScope[]
+  registrations ExamRegistration[]
+}
+
+model Subject {
+  id            String   @id @default(uuid())
+  code          String   @unique // canonical subject code, e.g. ARABIC, ENGLISH, MATH, SCIENCE
+  name          String
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  registrations ExamRegistration[]
+  mappings      WorkspaceSubjectMapping[]
+}
+
+model Student {
+  id          String    @id @default(uuid())
+  externalId  String    @unique // source StudentId
+  nameArabic  String?
+  nameEnglish String?
+  emiratesId  String?
+  grade       String?
+  classCode   String?
+  schoolId    String?
+  school      School?   @relation(fields: [schoolId], references: [id])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deletedAt   DateTime?
+
+  registrations ExamRegistration[]
+
+  @@index([schoolId])
+  @@index([grade])
+}
+
+// ---------------------------------------------------------------------------
+// FASTTEST WORKSPACE CONFIGURATION (secrets stored encrypted)
+// ---------------------------------------------------------------------------
+
+model FastTestWorkspace {
+  id                       String    @id @default(uuid())
+  workspaceName            String
+  subjectCode              String // canonical subject this workspace primarily serves
+  baseUrl                  String
+  restApiKeyEncrypted      String? // AES-256-GCM ciphertext; never returned to clients raw
+  usernameEncrypted        String?
+  passwordEncrypted        String?
+  isActive                 Boolean   @default(true)
+  syncEnabled              Boolean   @default(true)
+  syncPaused               Boolean   @default(false) // operator pause (queue control)
+  tokenTTL                 Int       @default(3600)
+  lastAuthenticationAt     DateTime?
+  lastAuthenticationStatus String? // SUCCESS | FAILED
+  lastAuthenticationError  String? @db.Text
+  lastSuccessfulSyncAt     DateTime?
+  // Token lifecycle (Phase 3)
+  nextTokenRefreshAt       DateTime?
+  authenticationDurationMs Int?
+  authenticationFailureCount Int     @default(0)
+  createdAt                DateTime  @default(now())
+  updatedAt                DateTime  @updatedAt
+  deletedAt                DateTime?
+
+  mappings      WorkspaceSubjectMapping[]
+  registrations ExamRegistration[]
+  statusSnapshots FastTestStatusSnapshot[]
+  results       FastTestResult[]
+  syncJobs      SyncJob[]
+  apiLogs       ApiRequestLog[]
+  rateLimit     WorkspaceRateLimit?
+  circuitBreaker WorkspaceCircuitBreaker?
+  healthSnapshots WorkspaceHealthSnapshot[]
+  alerts        SystemAlert[]
+
+  @@index([subjectCode])
+  @@index([isActive])
+}
+
+// Maps a subject alias (e.g. "Arabic Reading") to a workspace.
+model WorkspaceSubjectMapping {
+  id           String   @id @default(uuid())
+  workspaceId  String
+  subjectId    String?
+  subjectAlias String // free-text alias as it appears in the source ExamSubject
+  aliasNormalized String // uppercased/trimmed for matching
+  isActive     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  workspace FastTestWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  subject   Subject?          @relation(fields: [subjectId], references: [id])
+
+  @@unique([aliasNormalized])
+  @@index([workspaceId])
+}
+
+// ---------------------------------------------------------------------------
+// EXAM REGISTRATIONS (the core operational entity)
+// ---------------------------------------------------------------------------
+
+model ExamRegistration {
+  id                 String    @id @default(uuid())
+
+  // Source identity
+  studentExternalId  String
+  student            Student?  @relation(fields: [studentId], references: [id])
+  studentId          String?
+  schoolId           String?
+  school             School?   @relation(fields: [schoolId], references: [id])
+  subjectId          String?
+  subject            Subject?  @relation(fields: [subjectId], references: [id])
+
+  // Source exam fields
+  examSubject        String // raw ExamSubject from source
+  examName           String?
+  grade              String?
+  classCode          String?
+  startDate          String? // kept as source strings; not fabricated
+  endDate            String?
+  startTime          String?
+  endTime            String?
+  academicYear       String?
+  programType        String? // SPA | ABA — chosen at upload time, applies to the whole file
+  proctorCode        String?
+  accessToken        String? // exam access token from source (not a FastTest session token)
+
+  // TestCode (composite-key member with workspace)
+  testCodeOriginal   String
+  testCodeNormalized String
+
+  // Attendance — original source value is preserved, never overwritten.
+  attendanceOriginal String?
+
+  // Denormalized Emirates ID (from the student / import row) so unique-student
+  // counts and dashboard reads don't need to JOIN the Student table.
+  emiratesId         String?
+
+  // Workspace resolution
+  workspaceId        String?
+  workspace          FastTestWorkspace? @relation(fields: [workspaceId], references: [id])
+
+  // Denormalized latest FastTest status for fast dashboard reads
+  fastTestStatus     String? // raw FastTest status (NEW/INPROGRESS/...)
+  dashboardStatus    String  @default("NOT_SYNCED") // NOT_SYNCED until first sync, then NOT_STARTED/IN_PROGRESS/...
+  fastTestTestId     String?
+  fastTestTestName   String?
+  fastTestExamineeId String?
+  fastTestRegistrationDate String?
+  actualStartTime    String?
+  secondsUsed        Int?
+  lastSyncAt         DateTime?
+  lastSuccessfulSyncAt DateTime?
+  syncStatus         String  @default("PENDING") // PENDING | OK | ERROR | MANUAL_REVIEW
+  syncState          String  @default("PENDING") // formal state machine (src/lib/sync-state.ts)
+  syncError          String? @db.Text
+  syncRetryCount     Int     @default(0)
+  nextSyncAt         DateTime?
+  syncPriority       Int     @default(100) // lower = higher priority
+
+  // Stale-data detection (computed by the scheduler)
+  isStale            Boolean  @default(false)
+  staleSince         DateTime?
+  staleReason        String? @db.Text
+  staleSeverity      String? // LOW | MEDIUM | HIGH
+
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+  deletedAt          DateTime?
+
+  statusSnapshots FastTestStatusSnapshot[]
+  results         FastTestResult[]
+  syncJobs        SyncJob[]
+  attentionItems  AttentionItem[]
+  stateTransitions SyncStateTransition[]
+
+  // Uniqueness: same TestCode may exist across subjects, so key on
+  // (workspace, normalized testcode). Where workspace is unresolved we fall
+  // back to (examSubject, testCodeNormalized, studentExternalId).
+  @@unique([workspaceId, testCodeNormalized], name: "uq_workspace_testcode")
+  @@unique([studentExternalId, examSubject, testCodeNormalized], name: "uq_source_identity")
+  @@index([dashboardStatus])
+  @@index([schoolId])
+  @@index([subjectId])
+  @@index([workspaceId])
+  @@index([syncStatus])
+  @@index([syncState])
+  @@index([nextSyncAt])
+  @@index([testCodeNormalized])
+  @@index([programType])
+  @@index([isStale])
+  @@index([deletedAt])
+  @@index([emiratesId])
+  @@index([deletedAt, dashboardStatus])
+}
+
+// ---------------------------------------------------------------------------
+// FASTTEST STATUS & RESULTS
+// ---------------------------------------------------------------------------
+
+model FastTestStatusSnapshot {
+  id               String   @id @default(uuid())
+  registrationId   String
+  workspaceId      String
+  status           String
+  dashboardStatus  String
+  testId           String?
+  testName         String?
+  firstName        String?
+  lastName         String?
+  externalId       String?
+  examineeId       String?
+  registrationDate String?
+  rawJson          String @db.LongText // full response payload, never discarded
+  fetchedAt        DateTime @default(now())
+
+  registration ExamRegistration  @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  workspace    FastTestWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([registrationId])
+  @@index([fetchedAt])
+}
+
+model FastTestResult {
+  id                 String   @id @default(uuid())
+  registrationId     String
+  workspaceId        String
+
+  firstName          String?
+  lastName           String?
+  externalId         String?
+  examineeId         String?
+  email              String?
+  registrationDate   String?
+
+  testName           String?
+  startTime          String?
+  secondsUsed        Int?
+  passed             Boolean?
+
+  testSessionId      String?
+  testSessionName    String?
+  examineeGroupId    String?
+  examineeGroupPath  String?
+  constructorUrl     String?
+
+  // Calculated fields
+  attemptedItems     Int?
+  totalItemsCount    Int?
+  completionPercentage Float?
+  durationFormatted  String?
+  startDate          String?
+  startTimeOnly      String?
+
+  // Denormalized primary-score + dimensions for fast analytics aggregation
+  // (avoids joining through scores/registration on every dashboard query).
+  rawScore           Float?
+  scaledScore        Float?
+  sumScore           Float?
+  cutScore           Float?
+  correctCount       Int?
+  incorrectCount     Int?
+  skippedCount       Int?
+  schoolId           String?
+  subjectId          String?
+  grade              String?
+  examSubject        String?
+
+  rawJson            String @db.LongText // complete raw results payload
+  lastSyncAt         DateTime @default(now())
+  syncStatus         String   @default("OK")
+  syncError          String? @db.Text
+  syncRetryCount     Int      @default(0)
+
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  registration ExamRegistration  @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  workspace    FastTestWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  scores       FastTestScore[]
+
+  @@index([registrationId])
+  @@index([schoolId])
+  @@index([subjectId])
+}
+
+model FastTestScore {
+  id             String   @id @default(uuid())
+  resultId       String
+  examineeTestId String?
+  subscore       String?
+  name           String?
+  rawScore       Float?
+  sumScore       Float?
+  cutScore       Float?
+  scaledScore    Float?
+
+  // scoredItems breakdown
+  correct        Int?
+  incorrect      Int?
+  skipped        Int?
+  // totalItems breakdown
+  totalCorrect   Int?
+  totalIncorrect Int?
+  totalSkipped   Int?
+
+  rawJson        String @db.LongText
+  createdAt      DateTime @default(now())
+
+  result FastTestResult @relation(fields: [resultId], references: [id], onDelete: Cascade)
+
+  @@index([resultId])
+}
+
+// ---------------------------------------------------------------------------
+// SYNC ORCHESTRATION
+// ---------------------------------------------------------------------------
+
+// Durable, DB-backed queue job. Claimed atomically via a guarded updateMany
+// (status+lock guard) so only one worker ever processes a job — no Redis needed.
+model SyncJob {
+  id                 String   @id @default(uuid())
+  jobType            String // JOB_TYPE.* (AUTHENTICATE_WORKSPACE, SYNC_REGISTRATION_STATUS, ...)
+  priority           Int      @default(100) // lower = higher priority
+  workspaceId        String?
+  registrationId     String?
+  testCodeNormalized String?
+  subject            String?
+  schoolId           String?
+  payload            String?  @db.Text // JSON; MUST NOT contain secrets
+  status             String   @default("QUEUED") // QUEUED|RUNNING|DONE|FAILED|RETRY_SCHEDULED|DEAD_LETTER|CANCELLED|MANUAL_REVIEW
+  scheduledAt        DateTime @default(now())
+  startedAt          DateTime?
+  completedAt        DateTime?
+  attemptCount       Int      @default(0)
+  maxAttempts        Int      @default(3)
+  nextRetryAt        DateTime?
+  lockedBy           String?  // worker id currently holding the job
+  lockedAt           DateTime?
+  heartbeatAt        DateTime?
+  lastErrorCode      String?
+  lastErrorMessage   String?  @db.Text
+  dedupeKey          String?  // active-job dedup (enforced in code within a tx)
+  correlationId      String?
+  createdBy          String?  // actor email or SYSTEM
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  registration ExamRegistration?  @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  workspace    FastTestWorkspace? @relation(fields: [workspaceId], references: [id])
+  attempts     SyncJobAttempt[]
+
+  @@index([status, priority, scheduledAt])
+  @@index([status, nextRetryAt])
+  @@index([registrationId])
+  @@index([workspaceId, status])
+  @@index([jobType, status])
+  @@index([dedupeKey])
+  @@index([lockedBy])
+}
+
+model SyncJobAttempt {
+  id            String   @id @default(uuid())
+  jobId         String
+  attemptNumber Int
+  workerId      String?
+  endpoint      String?
+  status        String // SUCCESS | FAILURE
+  errorCategory String? // ERROR_CATEGORY.*
+  errorCode     String?
+  errorMessage  String?  @db.Text
+  httpStatus    Int?
+  durationMs    Int?
+  correlationId String?
+  startedAt     DateTime @default(now())
+  finishedAt    DateTime?
+
+  job SyncJob @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+  @@index([startedAt])
+}
+
+// Persisted registration sync-state transition history.
+model SyncStateTransition {
+  id             String   @id @default(uuid())
+  registrationId String
+  jobId          String?
+  fromState      String
+  toState        String
+  reason         String?  @db.Text
+  correlationId  String?
+  createdAt      DateTime @default(now())
+
+  registration ExamRegistration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+
+  @@index([registrationId])
+  @@index([createdAt])
+}
+
+// ---------------------------------------------------------------------------
+// OBSERVABILITY / AUDIT / SETTINGS
+// ---------------------------------------------------------------------------
+
+model ApiRequestLog {
+  id             String   @id @default(uuid())
+  workspaceId    String?
+  endpoint       String
+  method         String
+  requestedAt    DateTime @default(now())
+  respondedAt    DateTime?
+  responseTimeMs Int?
+  httpStatus     Int?
+  fastTestErrorCode String?
+  fastTestErrorMessage String? @db.Text
+  retryCount     Int      @default(0)
+  success        Boolean  @default(false)
+  correlationId  String?
+
+  workspace FastTestWorkspace? @relation(fields: [workspaceId], references: [id])
+
+  @@index([workspaceId])
+  @@index([requestedAt])
+  @@index([success])
+}
+
+model AuditLog {
+  id            String   @id @default(uuid())
+  userId        String?
+  actorEmail    String?
+  action        String // LOGIN | LOGOUT | LOGIN_FAILED | IMPORT | MANUAL_SYNC | EXPORT | ...
+  entityType    String?
+  entityId      String?
+  detail        String? @db.Text // human-readable; MUST NOT contain secrets
+  ipAddress     String?
+  createdAt     DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([action])
+  @@index([createdAt])
+}
+
+model SystemSetting {
+  key       String   @id
+  value     String   @db.Text
+  updatedAt DateTime @updatedAt
+}
+
+model ImportJob {
+  id            String   @id @default(uuid())
+  userId        String?
+  fileName      String
+  status        String   @default("PENDING") // PENDING | PREVIEW | CONFIRMED | COMPLETED | FAILED
+  totalRows     Int      @default(0)
+  createdCount  Int      @default(0)
+  updatedCount  Int      @default(0)
+  skippedCount  Int      @default(0)
+  failedCount   Int      @default(0)
+  summaryJson   String? @db.Text // preview/summary snapshot
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user   User?         @relation(fields: [userId], references: [id])
+  errors ImportError[]
+
+  @@index([status])
+}
+
+model ImportError {
+  id          String   @id @default(uuid())
+  importJobId String
+  rowNumber   Int
+  column      String?
+  value       String?  @db.Text
+  message     String   @db.Text
+  createdAt   DateTime @default(now())
+
+  importJob ImportJob @relation(fields: [importJobId], references: [id], onDelete: Cascade)
+
+  @@index([importJobId])
+}
+
+// ---------------------------------------------------------------------------
+// PHASE 2 — Saved views, table preferences, export history, attention queue
+// ---------------------------------------------------------------------------
+
+// A user-defined, reusable filter/sort/column configuration for a page.
+model SavedView {
+  id            String   @id @default(uuid())
+  userId        String // owner / creator
+  name          String
+  description   String?
+  pageType      String // registrations | schools | subjects | attention
+  filtersJson   String   @default("{}") @db.VarChar(4000)
+  sortBy        String?
+  sortDir       String? // asc | desc
+  columnsJson   String   @default("[]") @db.VarChar(2000) // visible columns, in order
+  pageSize      Int      @default(25)
+  isDefault     Boolean  @default(false)
+  isShared      Boolean  @default(false) // visible to all users (admin-created)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  deletedAt     DateTime?
+
+  user User @relation("UserSavedViews", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, pageType])
+  @@index([isShared])
+}
+
+// Per-user default column configuration for a page (independent of saved views).
+model UserTablePreference {
+  id          String   @id @default(uuid())
+  userId      String
+  pageType    String
+  columnsJson String   @default("[]") @db.VarChar(2000)
+  pageSize    Int      @default(25)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  user User @relation("UserTablePrefs", fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, pageType])
+}
+
+// Export request history / audit.
+model ExportJob {
+  id            String   @id @default(uuid())
+  userId        String?
+  exportType    String // preset key, e.g. ALL | CURRENT_FILTER | COMPLETED | ...
+  format        String // csv | xlsx
+  filtersJson   String   @default("{}") @db.VarChar(4000)
+  recordCount   Int      @default(0)
+  status        String   @default("PENDING") // PENDING | COMPLETED | FAILED
+  failureReason String?
+  startedAt     DateTime @default(now())
+  completedAt   DateTime?
+  createdBy     String? // actor email snapshot
+
+  user User? @relation("UserExportJobs", fields: [userId], references: [id])
+
+  @@index([userId])
+  @@index([status])
+  @@index([startedAt])
+}
+
+// Operational queue item for a registration requiring attention.
+model AttentionItem {
+  id             String   @id @default(uuid())
+  registrationId String
+  schoolId       String?
+  subjectId      String?
+  issueType      String // ATTENTION_ISSUE.*
+  severity       String // HIGH | MEDIUM | LOW
+  status         String   @default("OPEN") // OPEN | ACKNOWLEDGED | RESOLVED
+  lastError      String?  @db.Text
+  retryCount     Int      @default(0)
+  detail         String?  @db.Text
+  assignedToUserId String?
+  resolvedAt     DateTime?
+  resolvedBy     String?
+  firstDetectedAt DateTime @default(now())
+  lastDetectedAt  DateTime @default(now())
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  registration ExamRegistration @relation(fields: [registrationId], references: [id], onDelete: Cascade)
+  assignedTo   User?            @relation("UserAttentionAssigned", fields: [assignedToUserId], references: [id])
+  notes        AttentionNote[]
+
+  // One open item per (registration, issue) — recomputation upserts.
+  @@unique([registrationId, issueType])
+  @@index([status, severity])
+  @@index([schoolId])
+  @@index([issueType])
+}
+
+model AttentionNote {
+  id              String   @id @default(uuid())
+  attentionItemId String
+  authorUserId    String?
+  authorEmail     String?
+  note            String   @db.Text
+  createdAt       DateTime @default(now())
+
+  item   AttentionItem @relation(fields: [attentionItemId], references: [id], onDelete: Cascade)
+  author User?         @relation("UserAttentionNotes", fields: [authorUserId], references: [id])
+
+  @@index([attentionItemId])
+}
+
+// ---------------------------------------------------------------------------
+// PHASE 3 — Durable sync platform: workers, locks, rate limits, breakers,
+// alerts, metrics/health snapshots, queue controls.
+// ---------------------------------------------------------------------------
+
+// A registered worker process (for health monitoring + stalled recovery).
+model WorkerInstance {
+  id               String   @id // worker id (e.g. worker-<host>-<pid>-<rand>)
+  hostname         String?
+  pid              Int?
+  version          String?
+  status           String   @default("HEALTHY") // HEALTHY | DEGRADED | STALE | OFFLINE
+  startedAt        DateTime @default(now())
+  lastHeartbeatAt  DateTime @default(now())
+  currentJobs      Int      @default(0)
+  jobsCompleted    Int      @default(0)
+  jobsFailed       Int      @default(0)
+  avgJobDurationMs Int      @default(0)
+  memoryMb         Int?
+  cpuPercent       Float?
+  stoppedAt        DateTime?
+  updatedAt        DateTime @updatedAt
+
+  heartbeats WorkerHeartbeat[]
+
+  @@index([status])
+  @@index([lastHeartbeatAt])
+}
+
+model WorkerHeartbeat {
+  id          String   @id @default(uuid())
+  workerId    String
+  status      String
+  currentJobs Int      @default(0)
+  memoryMb    Int?
+  cpuPercent  Float?
+  createdAt   DateTime @default(now())
+
+  worker WorkerInstance @relation(fields: [workerId], references: [id], onDelete: Cascade)
+
+  @@index([workerId, createdAt])
+}
+
+// General-purpose distributed lock (token refresh, registration processing).
+model DistributedLock {
+  key         String   @id // e.g. "token:<workspaceId>" or "reg:<registrationId>"
+  owner       String
+  acquiredAt  DateTime @default(now())
+  heartbeatAt DateTime @default(now())
+  expiresAt   DateTime
+
+  @@index([expiresAt])
+}
+
+// Per-workspace, per-scope rate-limit configuration (conservative defaults).
+model WorkspaceRateLimit {
+  workspaceId    String   @id
+  maxRps         Float    @default(2)
+  maxRpm         Int      @default(60)
+  maxConcurrent  Int      @default(3)
+  maxBatch       Int      @default(25)
+  minDelayMs     Int      @default(200)
+  burst          Int      @default(5)
+  cooldownMs     Int      @default(30000)
+  // Per-endpoint concurrency overrides (null → inherit maxConcurrent)
+  authMaxConcurrent    Int?
+  statusMaxConcurrent  Int?
+  resultsMaxConcurrent Int?
+  updatedAt      DateTime @updatedAt
+
+  workspace FastTestWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+// Per-workspace circuit breaker state.
+model WorkspaceCircuitBreaker {
+  workspaceId     String   @id
+  state           String   @default("CLOSED") // CLOSED | OPEN | HALF_OPEN
+  failureCount    Int      @default(0)
+  successCount    Int      @default(0)
+  openedAt        DateTime?
+  nextProbeAt     DateTime?
+  lastTrippedReason String? @db.Text
+  updatedAt       DateTime @updatedAt
+
+  workspace FastTestWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}
+
+// Internal operational alerts.
+model SystemAlert {
+  id             String   @id @default(uuid())
+  alertType      String // ALERT_TYPE.*
+  severity       String // LOW | MEDIUM | HIGH | CRITICAL
+  status         String   @default("OPEN") // OPEN | ACKNOWLEDGED | RESOLVED
+  workspaceId    String?
+  title          String
+  detail         String?  @db.Text
+  dedupeKey      String?  @unique // one open alert per condition
+  assignedToUserId String?
+  acknowledgedAt DateTime?
+  resolvedAt     DateTime?
+  resolvedBy     String?
+  firstSeenAt    DateTime @default(now())
+  lastSeenAt     DateTime @default(now())
+  occurrences    Int      @default(1)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  workspace  FastTestWorkspace? @relation(fields: [workspaceId], references: [id])
+  assignedTo User?              @relation("UserAlertsAssigned", fields: [assignedToUserId], references: [id])
+  notes      AlertNote[]
+
+  @@index([status, severity])
+  @@index([alertType])
+}
+
+model AlertNote {
+  id          String   @id @default(uuid())
+  alertId     String
+  authorUserId String?
+  authorEmail String?
+  note        String   @db.Text
+  createdAt   DateTime @default(now())
+
+  alert  SystemAlert @relation(fields: [alertId], references: [id], onDelete: Cascade)
+  author User?       @relation("UserAlertNotes", fields: [authorUserId], references: [id])
+
+  @@index([alertId])
+}
+
+// Periodic queue KPI snapshot (for queue-depth-over-time charts + retention).
+model QueueMetricSnapshot {
+  id             String   @id @default(uuid())
+  queuedJobs     Int      @default(0)
+  runningJobs    Int      @default(0)
+  retryScheduled Int      @default(0)
+  deadLetterJobs Int      @default(0)
+  completedLastMin Int    @default(0)
+  failedLastMin  Int      @default(0)
+  oldestJobAgeMs Int      @default(0)
+  activeWorkers  Int      @default(0)
+  staleRegistrations Int  @default(0)
+  createdAt      DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+// Periodic per-workspace health snapshot (response-time/error trends + retention).
+model WorkspaceHealthSnapshot {
+  id             String   @id @default(uuid())
+  workspaceId    String
+  circuitState   String
+  avgResponseMs  Int      @default(0)
+  p95ResponseMs  Int      @default(0)
+  errorRate      Float    @default(0)
+  requestCount   Int      @default(0)
+  staleCount     Int      @default(0)
+  createdAt      DateTime @default(now())
+
+  workspace FastTestWorkspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, createdAt])
+}
+
+// Queue controls: pause/resume a workspace or a job type.
+model QueueControl {
+  id        String   @id @default(uuid())
+  scope     String // WORKSPACE | JOB_TYPE
+  scopeKey  String // workspaceId or jobType value
+  paused    Boolean  @default(false)
+  reason    String?  @db.Text
+  updatedBy String?
+  updatedAt DateTime @updatedAt
+
+  @@unique([scope, scopeKey])
+}
+
+// Durable server-side session store (replaces in-memory MemoryStore so sessions
+// survive process restarts / respawns). Managed by @quixo3/prisma-session-store.
+model Session {
+  id        String   @id
+  sid       String   @unique
+  data      String   @db.Text
+  expiresAt DateTime
+
+  @@index([expiresAt])
+}

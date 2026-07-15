@@ -1,0 +1,48 @@
+<%- include('partials/head') %>
+<%- include('partials/nav') %>
+
+<div class="panel">
+  <h2>Sync Attempts <span class="muted">(<%= total %> total)</span></h2>
+  <div style="overflow-x:auto">
+  <table>
+    <thead><tr><th>When</th><th>Job Type</th><th>Endpoint</th><th>Registration</th><th>Outcome</th><th>Category</th><th>HTTP</th><th>Duration</th><th>Worker</th><th>Correlation</th></tr></thead>
+    <tbody>
+      <% attempts.forEach(function(a){ %>
+        <tr>
+          <td class="muted"><%= new Date(a.startedAt).toLocaleString() %></td>
+          <td><%= a.job ? a.job.jobType : '—' %></td>
+          <td class="mono"><%= a.endpoint || '' %></td>
+          <td class="mono"><%= a.job && a.job.registrationId ? a.job.registrationId.slice(0,8) : '' %></td>
+          <td><span class="status <%= a.status==='SUCCESS'?'OK':'ERROR' %>"><%= a.status %></span></td>
+          <td class="mono"><%= a.errorCategory || '' %></td>
+          <td><%= a.httpStatus != null ? a.httpStatus : '' %></td>
+          <td><%= a.durationMs != null ? a.durationMs + ' ms' : '' %></td>
+          <td class="mono muted"><%= (a.workerId||'').slice(-8) %></td>
+          <td class="mono muted"><%= (a.correlationId||'').slice(0,8) %></td>
+        </tr>
+      <% }); %>
+      <% if(attempts.length===0){ %><tr><td colspan="10" class="empty">No sync attempts yet.</td></tr><% } %>
+    </tbody>
+  </table>
+  </div>
+  <div class="pager"><span>Page <%= page %> of <%= totalPages %></span>
+    <% if(page>1){ %><a class="btn secondary sm" href="/admin/sync-history?page=<%= page-1 %>">← Prev</a><% } %>
+    <% if(page<totalPages){ %><a class="btn secondary sm" href="/admin/sync-history?page=<%= page+1 %>">Next →</a><% } %>
+  </div>
+</div>
+
+<div class="panel">
+  <h2>Recent State Transitions</h2>
+  <table>
+    <thead><tr><th>When</th><th>Registration</th><th>From → To</th><th>Reason</th></tr></thead>
+    <tbody>
+      <% transitions.forEach(function(t){ %>
+        <tr><td class="muted"><%= new Date(t.createdAt).toLocaleString() %></td><td class="mono"><%= t.registrationId.slice(0,8) %></td>
+          <td><span class="mono"><%= t.fromState %></span> → <span class="mono"><%= t.toState %></span></td><td class="muted"><%= t.reason || '' %></td></tr>
+      <% }); %>
+      <% if(transitions.length===0){ %><tr><td colspan="4" class="empty">No transitions yet.</td></tr><% } %>
+    </tbody>
+  </table>
+</div>
+
+<%- include('partials/foot') %>

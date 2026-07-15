@@ -1,0 +1,13 @@
+<%
+  // locals: counts = {NOT_STARTED,...}, total
+  var order = ['NOT_SYNCED','NOT_STARTED','IN_PROGRESS','COMPLETED'];
+  var _t = total || order.reduce(function(s,k){ return s + (counts[k]||0); }, 0) || 1;
+%>
+<div class="stacked">
+  <% order.forEach(function(k){ var v = counts[k]||0; if(v>0){ %>
+    <span class="seg-<%= k %>" style="width:<%= (v/_t*100) %>%" title="<%= k.replace('_',' ') %>: <%= v %>"></span>
+  <% } }); %>
+</div>
+<div class="legend">
+  <% order.forEach(function(k){ %><span><i class="seg-<%= k %>"></i><%= k.replace('_',' ') %> (<%= counts[k]||0 %>)</span><% }); %>
+</div>

@@ -1,0 +1,50 @@
+<%- include('partials/head') %>
+<%- include('partials/nav') %>
+<% var canManage = principal.permissions.has('alert:manage'); %>
+
+<div class="kpis">
+  <div class="kpi err"><div class="label">Open Alerts</div><div class="value"><%= summary.total %></div></div>
+  <div class="kpi"><div class="label">Critical</div><div class="value sev-HIGH"><%= summary.bySeverity.CRITICAL || 0 %></div></div>
+  <div class="kpi"><div class="label">High</div><div class="value sev-HIGH"><%= summary.bySeverity.HIGH || 0 %></div></div>
+  <div class="kpi warn"><div class="label">Medium</div><div class="value"><%= summary.bySeverity.MEDIUM || 0 %></div></div>
+</div>
+
+<div class="panel">
+  <form method="get" class="toolbar">
+    <label>Status <select name="status"><option value="">All</option><% ['OPEN','ACKNOWLEDGED','RESOLVED'].forEach(function(s){ %><option value="<%= s %>" <%= query.status===s?'selected':'' %>><%= s %></option><% }); %></select></label>
+    <button class="btn" type="submit">Filter</button><a class="btn secondary" href="/admin/alerts">Reset</a>
+  </form>
+  <table>
+    <thead><tr><th>Type</th><th>Severity</th><th>Status</th><th>Workspace</th><th>Title</th><th>Occurrences</th><th>Last Seen</th><th>Assigned</th><th></th></tr></thead>
+    <tbody>
+      <% alerts.forEach(function(a){ %>
+        <tr>
+          <td class="mono"><%= a.alertType %></td>
+          <td class="sev-<%= a.severity==='CRITICAL'?'HIGH':a.severity %>"><%= a.severity %></td>
+          <td><span class="status <%= a.status==='RESOLVED'?'OK':(a.status==='OPEN'?'ERROR':'PENDING') %>"><%= a.status %></span></td>
+          <td><%= a.workspace ? a.workspace.workspaceName : '—' %></td>
+          <td><%= a.title %><% if(a.detail){ %><br><span class="muted"><%= a.detail.slice(0,80) %></span><% } %></td>
+          <td><%= a.occurrences %></td>
+          <td class="muted"><%= new Date(a.lastSeenAt).toLocaleString() %></td>
+          <td><%= a.assignedTo ? a.assignedTo.fullName : '—' %></td>
+          <td>
+            <% if (canManage && a.status!=='RESOLVED') { %>
+              <button class="btn secondary sm alert-ack" data-id="<%= a.id %>">Ack</button>
+              <button class="btn sm alert-resolve" data-id="<%= a.id %>">Resolve</button>
+            <% } %>
+          </td>
+        </tr>
+      <% }); %>
+      <% if(alerts.length===0){ %><tr><td colspan="9" class="empty">No alerts. System healthy. 🎉</td></tr><% } %>
+    </tbody>
+  </table>
+  <p class="muted" style="margin-top:8px">Alerts are internal only. Email/Teams delivery is available via extensible hooks (see docs/ALERTS_AND_MONITORING.md).</p>
+</div>
+
+<script>
+async function post(u){ await fetch(u, {method:'POST', headers:{'Accept':'application/json'}}); location.reload(); }
+document.querySelectorAll('.alert-ack').forEach(function(b){ b.onclick=function(){ post('/api/alerts/'+b.dataset.id+'/ack'); }; });
+document.querySelectorAll('.alert-resolve').forEach(function(b){ b.onclick=function(){ post('/api/alerts/'+b.dataset.id+'/resolve'); }; });
+</script>
+
+<%- include('partials/foot') %>

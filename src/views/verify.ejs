@@ -1,0 +1,153 @@
+<%- include('partials/head') %>
+<%- include('partials/nav') %>
+
+<div class="panel">
+  <h2 style="margin-top:0">🔎 Manual Verification</h2>
+  <p class="muted" style="font-size:13px;margin-top:-4px">
+    Enter a <b>TestCode</b> and <b>ExamName</b> to fetch the live FastTest status/results and compare
+    them against what is stored locally. This is a <b>read-only probe</b> — nothing is added to or changed in the database.
+  </p>
+  <div class="toolbar" style="align-items:flex-end;gap:14px;flex-wrap:wrap">
+    <label>TestCode
+      <input id="vCode" placeholder="e.g. FUJ-290-263-565" style="min-width:240px" />
+    </label>
+    <label>ExamName
+      <input id="vExam" placeholder="e.g. Arabic Grade 5" style="min-width:260px" />
+    </label>
+    <button class="btn sm" id="vBtn" type="button">Verify ⟳</button>
+    <span id="vHint" class="muted" style="font-size:13px"></span>
+  </div>
+</div>
+
+<div id="vOut" style="display:none">
+  <!-- Verdict banner -->
+  <div class="panel" id="vVerdict" style="border-left:5px solid #64748b"></div>
+
+  <!-- Resolution + live status -->
+  <div class="panel">
+    <h3 style="margin-top:0">Live FastTest</h3>
+    <table class="kv" style="width:100%;border-collapse:collapse">
+      <tbody id="vLive"></tbody>
+    </table>
+  </div>
+
+  <!-- Comparison -->
+  <div class="panel" id="vCmpPanel" style="display:none">
+    <h3 style="margin-top:0">Comparison with stored record</h3>
+    <table style="width:100%;border-collapse:collapse" class="grid">
+      <thead>
+        <tr><th style="text-align:left">Field</th><th style="text-align:left">Live (FastTest)</th><th style="text-align:left">Stored (DB)</th><th style="text-align:left">Match</th></tr>
+      </thead>
+      <tbody id="vCmp"></tbody>
+    </table>
+  </div>
+
+  <!-- Raw payloads -->
+  <div class="panel">
+    <details>
+      <summary style="cursor:pointer;font-weight:600">Raw status payload</summary>
+      <pre id="vRawStatus" style="overflow:auto;max-height:340px;background:#0b12200a;padding:10px;border-radius:8px"></pre>
+    </details>
+    <details>
+      <summary style="cursor:pointer;font-weight:600">Raw results payload</summary>
+      <pre id="vRawResults" style="overflow:auto;max-height:340px;background:#0b12200a;padding:10px;border-radius:8px"></pre>
+    </details>
+  </div>
+</div>
+
+<script>
+(function () {
+  var btn = document.getElementById('vBtn');
+  var out = document.getElementById('vOut');
+  var hint = document.getElementById('vHint');
+
+  function esc(v) {
+    if (v === null || v === undefined || v === '') return '—';
+    return String(v).replace(/[&<>"]/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    });
+  }
+  function row(k, v) { return '<tr><td style="padding:4px 12px 4px 0;color:#64748b;white-space:nowrap">' + esc(k) + '</td><td style="padding:4px 0"><b>' + esc(v) + '</b></td></tr>'; }
+
+  async function verify() {
+    var testCode = document.getElementById('vCode').value.trim();
+    var examName = document.getElementById('vExam').value.trim();
+    if (!testCode || !examName) { hint.textContent = 'Enter both TestCode and ExamName.'; return; }
+    hint.textContent = 'Checking…'; btn.disabled = true; out.style.display = 'none';
+    try {
+      var resp = await fetch('/api/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ testCode: testCode, examName: examName }),
+      });
+      var r = await resp.json();
+      render(r);
+    } catch (e) {
+      hint.textContent = 'Request failed: ' + e.message;
+    } finally {
+      btn.disabled = false;
+    }
+  }
+
+  function render(r) {
+    hint.textContent = '';
+    out.style.display = '';
+
+    var verdict = document.getElementById('vVerdict');
+    if (!r.ok) {
+      verdict.style.borderLeftColor = '#dc2626';
+      verdict.innerHTML = '<b style="color:#dc2626">✖ Could not verify</b> — ' + esc(r.error) + ' <span class="muted">(' + esc(r.errorType) + ')</span>';
+    } else if (!r.existsInDb) {
+      verdict.style.borderLeftColor = '#2563eb';
+      verdict.innerHTML = '<b style="color:#2563eb">ℹ Live data found</b> — this TestCode is <b>not stored locally</b>, so there is nothing to compare (verification only).';
+    } else if (r.inSync) {
+      verdict.style.borderLeftColor = '#16a34a';
+      verdict.innerHTML = '<b style="color:#16a34a">✔ In sync</b> — the stored record matches live FastTest.';
+    } else {
+      verdict.style.borderLeftColor = '#d97706';
+      verdict.innerHTML = '<b style="color:#d97706">⚠ Out of sync</b> — the stored record differs from live FastTest (see comparison below).';
+    }
+
+    var live = document.getElementById('vLive');
+    var lines = '';
+    lines += row('TestCode (normalized)', r.testCodeNormalized);
+    lines += row('ExamName', r.examName);
+    lines += row('Workspace', r.workspace ? (r.workspace.name + ' [' + r.workspace.subjectCode + ']') : null);
+    lines += row('Live status (raw)', r.liveStatusRaw);
+    lines += row('Live status (dashboard)', r.liveDashboardStatus);
+    if (r.liveExaminee) {
+      lines += row('Examinee', [r.liveExaminee.firstName, r.liveExaminee.lastName].filter(Boolean).join(' '));
+      lines += row('External ID', r.liveExaminee.externalId);
+    }
+    if (r.liveResultSummary) {
+      var s = r.liveResultSummary;
+      lines += row('Test name', s.testName);
+      lines += row('Start time', s.startTime);
+      lines += row('Seconds used', s.secondsUsed);
+      lines += row('Passed', s.passed === null ? null : (s.passed ? 'Yes' : 'No'));
+      lines += row('Raw / Scaled score', (s.rawScore == null ? '—' : s.rawScore) + ' / ' + (s.scaledScore == null ? '—' : s.scaledScore));
+      lines += row('Correct / Incorrect / Skipped', (s.correct == null ? '—' : s.correct) + ' / ' + (s.incorrect == null ? '—' : s.incorrect) + ' / ' + (s.skipped == null ? '—' : s.skipped));
+    }
+    live.innerHTML = lines;
+
+    var cmpPanel = document.getElementById('vCmpPanel');
+    var cmp = document.getElementById('vCmp');
+    if (r.existsInDb && r.diffs && r.diffs.length) {
+      cmp.innerHTML = r.diffs.map(function (d) {
+        var mark = d.match ? '<span style="color:#16a34a">✔ match</span>' : '<span style="color:#d97706">⚠ MISMATCH</span>';
+        return '<tr><td style="padding:6px 12px 6px 0">' + esc(d.field) + '</td><td style="padding:6px 12px 6px 0">' + esc(d.live) + '</td><td style="padding:6px 12px 6px 0">' + esc(d.stored) + '</td><td style="padding:6px 0">' + mark + '</td></tr>';
+      }).join('');
+      cmpPanel.style.display = '';
+    } else {
+      cmpPanel.style.display = 'none';
+    }
+
+    document.getElementById('vRawStatus').textContent = r.liveRawStatusJson || '(none)';
+    document.getElementById('vRawResults').textContent = r.liveRawResultsJson || '(none — results are fetched only when status is COMPLETED)';
+  }
+
+  btn.addEventListener('click', verify);
+  document.getElementById('vExam').addEventListener('keydown', function (e) { if (e.key === 'Enter') verify(); });
+  document.getElementById('vCode').addEventListener('keydown', function (e) { if (e.key === 'Enter') verify(); });
+})();
+</script>

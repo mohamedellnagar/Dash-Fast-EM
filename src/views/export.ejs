@@ -1,0 +1,47 @@
+<%- include('partials/head') %>
+<%- include('partials/nav') %>
+
+<div class="panel">
+  <h2>Export Registrations &amp; Reports</h2>
+  <p class="muted">Exports run server-side and respect your permissions, school scope, current filters and selected columns. Secrets and raw API JSON are never included.</p>
+  <form method="get" action="/export/registrations" class="filters">
+    <label>Preset
+      <select name="preset">
+        <% Object.keys(presets).forEach(function(k){ %><option value="<%= k %>"><%= presets[k] %></option><% }); %>
+      </select>
+    </label>
+    <label>Format
+      <select name="format"><option value="csv">CSV</option><option value="xlsx">Excel (XLSX)</option></select>
+    </label>
+    <label>Status filter (optional)
+      <select name="status"><option value="">All</option>
+        <% ['NOT_STARTED','IN_PROGRESS','COMPLETED'].forEach(function(s){ %><option value="<%= s %>"><%= s.replace('_',' ') %></option><% }); %>
+      </select>
+    </label>
+    <label>Subject contains<input name="examSubject" placeholder="e.g. Arabic" /></label>
+    <button class="btn" type="submit">Generate &amp; Download</button>
+  </form>
+</div>
+
+<div class="panel">
+  <h2>Export History</h2>
+  <table>
+    <thead><tr><th>When</th><th>By</th><th>Preset</th><th>Format</th><th>Records</th><th>Status</th><th>Failure</th></tr></thead>
+    <tbody>
+      <% jobs.forEach(function(j){ %>
+        <tr>
+          <td class="muted"><%= new Date(j.startedAt).toLocaleString() %></td>
+          <td><%= j.createdBy || '—' %></td>
+          <td><%= j.exportType %></td>
+          <td><%= j.format.toUpperCase() %></td>
+          <td><%= j.recordCount %></td>
+          <td><span class="status <%= j.status==='COMPLETED'?'OK':(j.status==='FAILED'?'ERROR':'PENDING') %>"><%= j.status %></span></td>
+          <td class="muted mono"><%= j.failureReason || '' %></td>
+        </tr>
+      <% }); %>
+      <% if (jobs.length===0){ %><tr><td colspan="7" class="empty">No exports yet.</td></tr><% } %>
+    </tbody>
+  </table>
+</div>
+
+<%- include('partials/foot') %>

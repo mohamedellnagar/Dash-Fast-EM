@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>FastTest — Live Overview</title>
+  <style>
+    :root{
+      --plane:#0d0d0d; --surface:#1a1a19; --surface2:#222220; --line:#2e2e2b;
+      --ink:#ffffff; --muted:#c3c2b7; --dim:#8a897f;
+      --c-completed:#0ca30c; --c-inprogress:#fab219; --c-notstarted:#3987e5; --c-notsynced:#6b6a63;
+      --good:#0ca30c; --warn:#fab219; --bad:#d03b3b;
+    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    html,body{height:100%}
+    body{background:var(--plane);color:var(--ink);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;overflow:hidden;
+      display:flex;flex-direction:column;height:100vh;padding:14px;gap:12px}
+    .muted{color:var(--muted)} .dim{color:var(--dim)}
+    /* header */
+    header{display:flex;align-items:center;gap:16px;flex:0 0 auto}
+    header .brand{font-size:22px;font-weight:800;letter-spacing:.3px}
+    header .brand .dot{display:inline-block;width:10px;height:10px;border-radius:50%;background:var(--good);margin-right:8px;box-shadow:0 0 10px var(--good);animation:pulse 2s infinite}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+    header .spacer{flex:1}
+    .pill{padding:5px 12px;border-radius:999px;font-size:13px;font-weight:600;border:1px solid var(--line);background:var(--surface);white-space:nowrap}
+    .pill.on{color:var(--good);border-color:#0ca30c55} .pill.off{color:var(--dim)}
+    .pill.fast{color:var(--warn);border-color:#fab21955}
+    #clock{font-variant-numeric:tabular-nums;font-size:20px;font-weight:700}
+    /* grid rows */
+    .tiles{flex:0 0 auto;display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+    .tile{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px 18px;position:relative;overflow:hidden}
+    .tile .label{font-size:14px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.4px}
+    .tile .val{font-size:clamp(30px,4.4vw,60px);font-weight:800;line-height:1.05;margin-top:6px;font-variant-numeric:tabular-nums}
+    .tile .sub{font-size:13px;color:var(--dim);margin-top:4px}
+    .tile.accent-g .val{color:var(--c-completed)} .tile.accent-a .val{color:var(--c-inprogress)} .tile.accent-b .val{color:var(--c-notstarted)}
+    .mid{flex:1 1 auto;display:grid;grid-template-columns:1.6fr 1fr;gap:12px;min-height:0}
+    .panel{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px 18px;display:flex;flex-direction:column;min-height:0}
+    .panel h2{font-size:15px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:14px;flex:0 0 auto}
+    /* status segmented bar */
+    .segbar{height:44px;border-radius:8px;display:flex;overflow:hidden;background:var(--plane);gap:2px}
+    .segbar > div{transition:width .6s ease;min-width:2px}
+    .seg-legend{display:grid;grid-template-columns:repeat(2,1fr);gap:10px 22px;margin-top:18px}
+    .seg-legend .row{display:flex;align-items:center;gap:10px}
+    .seg-legend .sw{width:14px;height:14px;border-radius:4px;flex:0 0 auto}
+    .seg-legend .nm{flex:1;font-size:15px}
+    .seg-legend .ct{font-weight:800;font-size:18px;font-variant-numeric:tabular-nums}
+    .seg-legend .pc{color:var(--dim);font-size:13px;width:52px;text-align:right}
+    /* sync progress panel */
+    .ring-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:6px}
+    .ring{position:relative;width:min(30vh,220px);aspect-ratio:1}
+    .ring svg{transform:rotate(-90deg);width:100%;height:100%}
+    .ring .center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+    .ring .center .big{font-size:clamp(28px,3.6vw,46px);font-weight:800;font-variant-numeric:tabular-nums}
+    .throughput{display:flex;align-items:baseline;gap:8px;justify-content:center;margin-top:4px}
+    .throughput .n{font-size:28px;font-weight:800;color:var(--good);font-variant-numeric:tabular-nums}
+    /* subjects */
+    .subjects{flex:0 0 auto;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:14px 18px}
+    .subjects h2{font-size:15px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px}
+    .subrow{display:grid;grid-template-columns:210px 1fr 60px;align-items:center;gap:12px;margin:8px 0}
+    .subrow .nm{font-size:15px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .track{height:16px;background:var(--plane);border-radius:8px;overflow:hidden}
+    .track > span{display:block;height:100%;background:var(--c-completed);border-radius:8px;transition:width .6s ease}
+    .subrow .pc{text-align:right;font-weight:800;font-variant-numeric:tabular-nums}
+    /* health strip */
+    .health{flex:0 0 auto;display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+    .hcard{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:12px 16px}
+    .hcard .l{font-size:13px;color:var(--muted);font-weight:600}
+    .hcard .v{font-size:26px;font-weight:800;margin-top:4px;font-variant-numeric:tabular-nums}
+    .stale{opacity:.5}
+  </style>
+</head>
+<body data-palette="#0ca30c,#fab219,#3987e5,#6b6a63">
+  <header>
+    <div class="brand"><span class="dot"></span>FastTest — Live Overview</div>
+    <span class="pill" id="healthPill">FastTest: —</span>
+    <span class="pill" id="wsPill">Workspace: —</span>
+    <div class="spacer"></div>
+    <span class="pill" id="modePill">Mode: —</span>
+    <span class="pill" id="syncPill">Last sync: —</span>
+    <span id="clock">--:--:--</span>
+  </header>
+
+  <section class="tiles">
+    <div class="tile"><div class="label">Total Registered</div><div class="val" id="t-total">—</div><div class="sub" id="t-subjects">—</div></div>
+    <div class="tile accent-g"><div class="label">Completed</div><div class="val" id="t-completed">—</div><div class="sub" id="t-completionrate">—</div></div>
+    <div class="tile accent-a"><div class="label">In Progress</div><div class="val" id="t-inprogress">—</div><div class="sub">taking exam now</div></div>
+    <div class="tile accent-b"><div class="label">Synced</div><div class="val" id="t-syncedpc">—</div><div class="sub" id="t-syncedn">—</div></div>
+  </section>
+
+  <section class="mid">
+    <div class="panel">
+      <h2>Registration Status</h2>
+      <div class="segbar" id="segbar"></div>
+      <div class="seg-legend" id="legend"></div>
+    </div>
+    <div class="panel">
+      <h2>Sync Progress</h2>
+      <div class="ring-wrap">
+        <div class="ring">
+          <svg viewBox="0 0 100 100">
+            <circle cx="50" cy="50" r="42" fill="none" stroke="#2e2e2b" stroke-width="10"></circle>
+            <circle id="ringFg" cx="50" cy="50" r="42" fill="none" stroke="var(--good)" stroke-width="10" stroke-linecap="round" stroke-dasharray="264" stroke-dashoffset="264"></circle>
+          </svg>
+          <div class="center"><div class="big" id="r-pc">—</div><div class="dim" style="font-size:13px">synced</div></div>
+        </div>
+        <div class="throughput"><span class="n" id="r-tput">—</span><span class="muted">sync/min · live</span></div>
+        <div class="dim" id="r-remaining" style="font-size:14px">—</div>
+      </div>
+    </div>
+  </section>
+
+  <section class="subjects">
+    <h2>Completion by Subject</h2>
+    <div id="subjects"></div>
+  </section>
+
+  <section class="health">
+    <div class="hcard"><div class="l">API Success</div><div class="v" id="h-api">—</div></div>
+    <div class="hcard"><div class="l">Avg Response</div><div class="v" id="h-resp">—</div></div>
+    <div class="hcard"><div class="l">Completion Rate</div><div class="v" id="h-comp">—</div></div>
+    <div class="hcard"><div class="l">Avg Time Used</div><div class="v" id="h-time">—</div></div>
+    <div class="hcard"><div class="l">Stale / Errors</div><div class="v" id="h-stale">—</div></div>
+  </section>
+
+  <script>
+    var STATUS = [
+      {key:'NOT_SYNCED',  name:'Not Synced',  color:'#6b6a63'},
+      {key:'NOT_STARTED', name:'Not Started', color:'#3987e5'},
+      {key:'IN_PROGRESS', name:'In Progress', color:'#fab219'},
+      {key:'COMPLETED',   name:'Completed',   color:'#0ca30c'}
+    ];
+    var fmt = function(n){ return (n==null||isNaN(n)) ? '—' : Number(n).toLocaleString('en-US'); };
+    var pct = function(n,d){ return d>0 ? Math.round(n/d*1000)/10 : 0; };
+    var ago = function(iso){ if(!iso) return '—'; var s=Math.max(0,(Date.now()-new Date(iso).getTime())/1000);
+      if(s<60) return Math.round(s)+'s ago'; if(s<3600) return Math.round(s/60)+'m ago'; return Math.round(s/3600)+'h ago'; };
+    var mmss = function(sec){ if(sec==null) return '—'; var m=Math.floor(sec/60), s=Math.round(sec%60); return m+'m '+(s<10?'0':'')+s+'s'; };
+
+    function tick(){ var d=new Date(); document.getElementById('clock').textContent = d.toLocaleTimeString('en-GB'); }
+    setInterval(tick,1000); tick();
+
+    async function j(u){ var r=await fetch(u,{headers:{Accept:'application/json'}}); if(!r.ok) throw new Error(u+' '+r.status); return r.json(); }
+
+    async function refresh(){
+      try{
+        var brandDot = document.querySelector('.brand .dot');
+        var ov, subj, q, health;
+        try { [ov, subj, q, health] = await Promise.all([
+          j('/api/dashboard/overview'), j('/api/dashboard/subjects'),
+          j('/api/queue/stats').catch(function(){return null;}), j('/api/dashboard/api-health').catch(function(){return null;})
+        ]); } catch(e){ brandDot.style.background='#d03b3b'; brandDot.style.boxShadow='0 0 10px #d03b3b'; return; }
+        brandDot.style.background='#0ca30c'; brandDot.style.boxShadow='0 0 10px #0ca30c';
+
+        var total = ov.totalRegistered||0;
+        var synced = total - (ov.NOT_SYNCED||0);
+        // tiles
+        document.getElementById('t-total').textContent = fmt(total);
+        document.getElementById('t-subjects').textContent = (subj.subjects?subj.subjects.length:0)+' subjects';
+        document.getElementById('t-completed').textContent = fmt(ov.COMPLETED);
+        document.getElementById('t-completionrate').textContent = (ov.completionRate!=null?ov.completionRate+'% completion rate':'');
+        document.getElementById('t-inprogress').textContent = fmt(ov.IN_PROGRESS);
+        document.getElementById('t-syncedpc').textContent = pct(synced,total)+'%';
+        document.getElementById('t-syncedn').textContent = fmt(synced)+' / '+fmt(total);
+
+        // status segmented bar + legend
+        var seg = document.getElementById('segbar'); var leg = document.getElementById('legend');
+        seg.innerHTML=''; leg.innerHTML='';
+        STATUS.forEach(function(s){
+          var v = ov[s.key]||0; var w = total>0 ? (v/total*100) : 0;
+          var d = document.createElement('div'); d.style.width=w+'%'; d.style.background=s.color; d.title=s.name+': '+fmt(v); seg.appendChild(d);
+          var row=document.createElement('div'); row.className='row';
+          row.innerHTML='<span class="sw" style="background:'+s.color+'"></span><span class="nm">'+s.name+'</span><span class="ct">'+fmt(v)+'</span><span class="pc">'+pct(v,total)+'%</span>';
+          leg.appendChild(row);
+        });
+
+        // sync ring
+        var p = pct(synced,total);
+        document.getElementById('r-pc').textContent = p+'%';
+        var C=264; document.getElementById('ringFg').style.strokeDashoffset = (C-(C*p/100)).toFixed(1);
+        var tput = q ? (q.jobsLastMin||0) : 0;
+        document.getElementById('r-tput').textContent = fmt(tput);
+        document.getElementById('r-remaining').textContent = fmt(ov.NOT_SYNCED||0)+' remaining · '+(q?fmt(q.running||0)+' running · '+fmt(q.queued||0)+' queued':'');
+
+        // subjects (sorted by total desc, top 8)
+        var sd = document.getElementById('subjects'); sd.innerHTML='';
+        (subj.subjects||[]).slice().sort(function(a,b){return b.total-a.total;}).slice(0,8).forEach(function(s){
+          var cr = s.completionRate!=null ? s.completionRate : pct(s.COMPLETED, s.total);
+          var row=document.createElement('div'); row.className='subrow';
+          row.innerHTML='<span class="nm" title="'+s.examSubject+'">'+s.examSubject+'</span>'+
+            '<span class="track"><span style="width:'+cr+'%"></span></span>'+
+            '<span class="pc">'+cr+'%</span>';
+          sd.appendChild(row);
+        });
+
+        // header pills
+        var mp=document.getElementById('modePill');
+        if(q){ /* mode comes from control-state; fetch lightly */ }
+        document.getElementById('syncPill').textContent='Last sync: '+ago(ov.lastSuccessfulSyncAt);
+        if(health && health.workspaces && health.workspaces[0]){
+          var w0=health.workspaces[0];
+          var wp=document.getElementById('wsPill'); wp.textContent='Workspace: '+w0.workspaceName+' · '+w0.connectionStatus;
+          wp.className='pill '+(w0.connectionStatus==='SUCCESS'?'on':'off');
+        }
+
+        // health strip
+        document.getElementById('h-api').textContent = (ov.apiSuccessRate!=null?ov.apiSuccessRate+'%':'—');
+        document.getElementById('h-resp').textContent = (ov.avgResponseTimeMs!=null?ov.avgResponseTimeMs+' ms':'—');
+        document.getElementById('h-comp').textContent = (ov.completionRate!=null?ov.completionRate+'%':'—');
+        document.getElementById('h-time').textContent = mmss(ov.avgTimeUsedSeconds);
+        var stale=(ov.staleCount||0), errs=(ov.syncErrors||0);
+        var hs=document.getElementById('h-stale'); hs.textContent = stale+' / '+errs;
+        hs.style.color = (stale+errs)>0 ? '#fab219' : '#0ca30c';
+      }catch(e){ /* keep last good values */ }
+    }
+
+    // FastTest health verdict pill (reads local logs — no FastTest load)
+    async function refreshHealth(){
+      try{ var h=await j('/api/fasttest/health');
+        var hp=document.getElementById('healthPill');
+        var icon = h.verdict==='HEALTHY'?'🟢':(h.verdict==='DEGRADED'?'🟡':'🔴');
+        var col  = h.verdict==='HEALTHY'?'#0ca30c':(h.verdict==='DEGRADED'?'#fab219':'#d03b3b');
+        hp.textContent = icon+' FastTest: '+h.verdict+'  ·  '+h.calls.successRate+'% · p95 '+h.latency.p95+'ms · '+(h.workspace?h.workspace.circuit:'—');
+        hp.style.color = col; hp.style.borderColor = col+'66';
+      }catch(e){}
+    }
+
+    // fetch control-state separately for the mode pill
+    async function refreshMode(){
+      try{ var s=await j('/api/queue/control-state');
+        var mp=document.getElementById('modePill');
+        if(s.globalPaused){ mp.textContent='Sync: PAUSED'; mp.className='pill off'; }
+        else if(s.fastMode){ mp.textContent='Mode: ⚡ FAST'; mp.className='pill fast'; }
+        else { mp.textContent='Mode: Normal'; mp.className='pill on'; }
+      }catch(e){}
+    }
+
+    refresh(); refreshMode(); refreshHealth();
+    setInterval(refresh, 4000);
+    setInterval(refreshMode, 6000);
+    setInterval(refreshHealth, 6000);
+  </script>
+</body>
+</html>

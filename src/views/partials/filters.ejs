@@ -1,0 +1,63 @@
+<%
+  // locals: query (current values), action (form target), subjects (optional [])
+  var q = query || {};
+  function v(k){ return q[k] ? String(q[k]).replace(/"/g,'&quot;') : ''; }
+  var subj = typeof subjects !== 'undefined' ? subjects : [];
+  var statuses = ['NOT_SYNCED','NOT_STARTED','IN_PROGRESS','COMPLETED'];
+  var syncStatuses = ['PENDING','OK','ERROR','MANUAL_REVIEW'];
+%>
+<details class="filters-adv" <%= Object.keys(q).filter(function(k){return !['page','pageSize','sortBy','sortDir','columns'].includes(k);}).length ? 'open' : '' %>>
+  <summary>Filters <% var active = Object.keys(q).filter(function(k){return q[k] && !['page','pageSize','sortBy','sortDir','columns'].includes(k);}); %><% if(active.length){ %><span class="chip"><%= active.length %> active</span><% } %></summary>
+  <form method="get" action="<%= action %>">
+    <div class="filters">
+      <label>Search<input name="search" value="<%= v('search') %>" placeholder="ID / TestCode / Exam" /></label>
+      <label>Student ID<input name="studentId" value="<%= v('studentId') %>" /></label>
+      <label>Name (Arabic)<input name="nameArabic" value="<%= v('nameArabic') %>" /></label>
+      <label>Name (English)<input name="nameEnglish" value="<%= v('nameEnglish') %>" /></label>
+      <label>Emirates ID<input name="emiratesId" value="<%= v('emiratesId') %>" /></label>
+      <label>School Name<input name="schoolName" value="<%= v('schoolName') %>" /></label>
+      <label>Grade<input name="grade" value="<%= v('grade') %>" /></label>
+      <label>Class<input name="classCode" value="<%= v('classCode') %>" /></label>
+      <label>Subject
+        <select name="subjectId"><option value="">All</option>
+          <% subj.forEach(function(s){ %><option value="<%= s.id %>" <%= q.subjectId===s.id?'selected':'' %>><%= s.name %></option><% }); %>
+        </select>
+      </label>
+      <label>Exam Name<input name="examName" value="<%= v('examName') %>" /></label>
+      <label>Test Code<input name="testCode" value="<%= v('testCode') %>" /></label>
+      <label>Proctor Code<input name="proctorCode" value="<%= v('proctorCode') %>" /></label>
+      <label>Academic Year<input name="academicYear" value="<%= v('academicYear') %>" /></label>
+      <label>Program
+        <select name="programType"><option value="">All</option>
+          <% ['SPA','ABA'].forEach(function(p){ %><option value="<%= p %>" <%= q.programType===p?'selected':'' %>><%= p %></option><% }); %>
+        </select>
+      </label>
+      <label>Attendance<input name="attendance" value="<%= v('attendance') %>" placeholder="Present/Absent" /></label>
+      <label>Status
+        <select name="status"><option value="">All</option>
+          <% statuses.forEach(function(s){ %><option value="<%= s %>" <%= q.status===s?'selected':'' %>><%= s.replace('_',' ') %></option><% }); %>
+        </select>
+      </label>
+      <label>Sync Status
+        <select name="syncStatus"><option value="">All</option>
+          <% syncStatuses.forEach(function(s){ %><option value="<%= s %>" <%= q.syncStatus===s?'selected':'' %>><%= s %></option><% }); %>
+        </select>
+      </label>
+      <label>Reg. Date From<input type="date" name="registrationDateFrom" value="<%= v('registrationDateFrom') %>" /></label>
+      <label>Reg. Date To<input type="date" name="registrationDateTo" value="<%= v('registrationDateTo') %>" /></label>
+      <label>Exam Start From<input type="date" name="examStartFrom" value="<%= v('examStartFrom') %>" /></label>
+      <label>Exam End To<input type="date" name="examEndTo" value="<%= v('examEndTo') %>" /></label>
+      <label>Score Min<input type="number" name="scoreMin" value="<%= v('scoreMin') %>" /></label>
+      <label>Score Max<input type="number" name="scoreMax" value="<%= v('scoreMax') %>" /></label>
+      <label>Duration Min (s)<input type="number" name="durationMin" value="<%= v('durationMin') %>" /></label>
+      <label>Duration Max (s)<input type="number" name="durationMax" value="<%= v('durationMax') %>" /></label>
+      <label>API Error
+        <select name="apiError"><option value="">All</option><option value="1" <%= q.apiError?'selected':'' %>>Errors only</option></select>
+      </label>
+    </div>
+    <div class="toolbar" style="margin-top:10px">
+      <button class="btn" type="submit">Apply Filters</button>
+      <a class="btn secondary" href="<%= action %>">Reset</a>
+    </div>
+  </form>
+</details>

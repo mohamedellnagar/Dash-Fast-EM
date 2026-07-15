@@ -1,0 +1,68 @@
+{
+  "name": "fasttest-live-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "FastTest Live Monitoring & Analytics Dashboard",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && rm -rf dist/views dist/public && cp -r src/views dist/views && cp -r src/public dist/public",
+    "start": "node dist/server.js",
+    "dev": "ts-node-dev --respawn --transpile-only src/server.ts",
+    "worker": "ts-node-dev --respawn --transpile-only src/workers/sync.worker.ts",
+    "worker:prod": "node dist/workers/sync.worker.js",
+    "prisma:generate": "prisma generate",
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:deploy": "prisma migrate deploy",
+    "db:reset": "prisma migrate reset --force",
+    "db:seed": "ts-node --transpile-only prisma/seed.ts",
+    "pretest": "bash scripts/prepare-test-db.sh",
+    "test": "DATABASE_URL=\"file:./test.db\" vitest run",
+    "test:watch": "DATABASE_URL=\"file:./test.db\" vitest",
+    "test:live": "RUN_LIVE_FASTTEST=1 vitest run tests/live",
+    "lint": "eslint . --ext .ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "prisma": {
+    "seed": "ts-node --transpile-only prisma/seed.ts"
+  },
+  "dependencies": {
+    "@prisma/client": "5.22.0",
+    "@quixo3/prisma-session-store": "^3.1.21",
+    "bcryptjs": "2.4.3",
+    "compression": "1.7.4",
+    "cookie-parser": "1.4.7",
+    "csv-parse": "5.5.6",
+    "dotenv": "16.4.5",
+    "ejs": "3.1.10",
+    "express": "4.21.2",
+    "express-rate-limit": "7.4.1",
+    "express-session": "1.18.1",
+    "helmet": "8.0.0",
+    "multer": "^2.0.2",
+    "pino": "9.5.0",
+    "pino-http": "10.3.0",
+    "uuid": "9.0.1",
+    "xlsx": "0.18.5",
+    "zod": "3.23.8"
+  },
+  "devDependencies": {
+    "@types/bcryptjs": "2.4.6",
+    "@types/compression": "1.7.5",
+    "@types/cookie-parser": "1.4.8",
+    "@types/express": "4.17.21",
+    "@types/express-session": "1.18.0",
+    "@types/multer": "^1.4.12",
+    "@types/node": "20.16.11",
+    "@types/supertest": "6.0.2",
+    "@types/uuid": "9.0.8",
+    "prisma": "5.22.0",
+    "supertest": "7.0.0",
+    "ts-node": "10.9.2",
+    "ts-node-dev": "2.0.0",
+    "typescript": "5.6.3",
+    "vitest": "2.1.3"
+  }
+}

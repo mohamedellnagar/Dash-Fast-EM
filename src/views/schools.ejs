@@ -1,0 +1,73 @@
+<%- include('partials/head') %>
+<%- include('partials/nav') %>
+
+<%- include('partials/filters', { query: query, subjects: subjects, action: '/schools' }) %>
+
+<div class="kpis">
+  <div class="kpi info"><div class="label">Total Registered</div><div class="value"><%= kpis.totalRegistered %></div></div>
+  <div class="kpi"><div class="label">Not Started</div><div class="value"><%= kpis.NOT_STARTED %></div></div>
+  <div class="kpi warn"><div class="label">In Progress</div><div class="value"><%= kpis.IN_PROGRESS %></div></div>
+  <div class="kpi ok"><div class="label">Completed</div><div class="value"><%= kpis.COMPLETED %></div></div>
+  <div class="kpi ok"><div class="label">Completion Rate</div><div class="value"><%= kpis.completionRate %>%</div></div>
+  <div class="kpi <%= kpis.staleCount>0?'warn':'' %>"><div class="label">Stale Records</div><div class="value"><%= kpis.staleCount %></div></div>
+  <div class="kpi"><div class="label">Avg Time Used</div><div class="value"><%= kpis.avgTimeUsedSeconds === null ? '—' : Math.round(kpis.avgTimeUsedSeconds/60) + 'm' %></div></div>
+  <div class="kpi"><div class="label">Avg Raw Score</div><div class="value"><%= kpis.avgRawScore === null ? '—' : kpis.avgRawScore %></div></div>
+  <div class="kpi"><div class="label">Avg Scaled Score</div><div class="value"><%= kpis.avgScaledScore === null ? '—' : kpis.avgScaledScore %></div></div>
+</div>
+
+<div class="grid2">
+  <div class="panel"><h2>Registrations by Status</h2><%- include('partials/statusbar', { counts: statusDist.counts, total: statusDist.total }) %></div>
+  <div class="panel"><h2>Correct vs Incorrect vs Skipped</h2>
+    <% var ct = (cis.correct+cis.incorrect+cis.skipped)||1; %>
+    <div class="stacked">
+      <span class="seg-correct" style="width:<%= cis.correct/ct*100 %>%"></span>
+      <span class="seg-incorrect" style="width:<%= cis.incorrect/ct*100 %>%"></span>
+      <span class="seg-skipped" style="width:<%= cis.skipped/ct*100 %>%"></span>
+    </div>
+    <div class="legend"><span><i class="seg-correct"></i>Correct (<%= cis.correct %>)</span><span><i class="seg-incorrect"></i>Incorrect (<%= cis.incorrect %>)</span><span><i class="seg-skipped"></i>Skipped (<%= cis.skipped %>)</span></div>
+  </div>
+</div>
+
+<div class="grid3">
+  <div class="panel"><h2>Completion % by Subject</h2><%- include('partials/hbars', { bars: subjectsTable.map(function(s){return {label:s.examSubject, value:s.completionRate};}), unit:'%', pct:true }) %></div>
+  <div class="panel"><h2>Completion % by Grade</h2><%- include('partials/hbars', { bars: byGrade.map(function(g){return {label:'Grade '+g.grade, value:g.completionRate};}), unit:'%', pct:true }) %></div>
+  <div class="panel"><h2>Avg Raw Score by Subject</h2><%- include('partials/hbars', { bars: scores.map(function(s){return {label:s.examSubject, value:s.avgRawScore};}) }) %></div>
+</div>
+
+<div class="grid3">
+  <div class="panel"><h2>Avg Duration by Subject</h2><%- include('partials/hbars', { bars: durations.map(function(d){return {label:d.examSubject, value: d.avgSeconds===null?null:Math.round(d.avgSeconds/60)};}), unit:'m' }) %></div>
+  <div class="panel"><h2>Registration Trend by Date</h2>
+    <% var tmax = trends.reduce(function(m,t){return Math.max(m,t.total);},0)||1; %>
+    <div class="spark"><% trends.slice(-30).forEach(function(t){ %><span style="height:<%= Math.max(4, t.total/tmax*60) %>px" title="<%= t.date %>: <%= t.total %> (<%= t.completed %> completed)"></span><% }); %></div>
+    <% if(trends.length===0){ %><div class="empty">No dated registrations</div><% } %>
+  </div>
+  <div class="panel"><h2>Sync Error Distribution</h2><%- include('partials/hbars', { bars: errorDist.map(function(e){return {label:e.code, value:e.count};}) }) %></div>
+</div>
+
+<div class="panel">
+  <h2>Schools</h2>
+  <div style="overflow-x:auto">
+  <table>
+    <thead><tr>
+      <th>School</th><th>Total</th><th>Not Started</th><th>In Progress</th><th>Completed</th>
+      <th>Completion</th><th>Avg Time</th><th>Avg Score</th><th>API Errors</th><th></th>
+    </tr></thead>
+    <tbody>
+      <% schoolsTable.forEach(function(s){ %>
+        <tr>
+          <td><%= s.schoolName %></td><td><%= s.total %></td>
+          <td><%= s.NOT_STARTED %></td><td><%= s.IN_PROGRESS %></td><td><%= s.COMPLETED %></td>
+          <td><div class="bar"><span style="width:<%= s.completionRate %>%"></span></div><span class="muted"><%= s.completionRate %>%</span></td>
+          <td><%= s.avgTimeUsed===null ? '—' : Math.round(s.avgTimeUsed/60)+'m' %></td>
+          <td><%= s.avgRawScore===null ? '—' : s.avgRawScore %></td>
+          <td><%= s.apiErrors %></td>
+          <td><% if (s.schoolId !== 'UNASSIGNED') { %><a class="btn secondary sm" href="/schools/<%= s.schoolId %>">Open</a><% } %></td>
+        </tr>
+      <% }); %>
+      <% if (schoolsTable.length===0){ %><tr><td colspan="13" class="empty">No school data. Import registrations to begin.</td></tr><% } %>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<%- include('partials/foot') %>

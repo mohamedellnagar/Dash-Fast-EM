@@ -1,0 +1,191 @@
+<%- include('partials/head') %>
+<%- include('partials/nav') %>
+<% function can(p){ return principal.permissions.has(p); }
+   function badge(v){ return '<span class="status '+v+'">'+String(v).replace(/_/g,' ')+'</span>'; }
+   var colsCsv = selectedKeys.join(',');
+%>
+
+<%- include('partials/filters', { query: query, subjects: subjects, action: '/monitoring' }) %>
+
+<% if (can('sync:manual')) { %>
+<div class="panel">
+  <div class="toolbar" style="align-items:flex-end">
+    <label>Manual Sync by Test Code
+      <input id="msCode" placeholder="e.g. FUJ-290-263-565" style="min-width:220px" />
+    </label>
+    <button class="btn sm" id="msBtn" type="button">Sync now ⟳</button>
+    <span id="msResult" class="muted" style="font-size:13px"></span>
+  </div>
+</div>
+<% } %>
+
+<div class="panel">
+  <div class="toolbar">
+    <!-- Column selector -->
+    <div class="col-menu" style="margin-left:auto">
+      <button class="btn secondary sm" id="colBtn" type="button">Columns ▾</button>
+      <div class="col-panel" id="colPanel" style="display:none"></div>
+    </div>
+
+    <% if (can('export:run')) { %>
+      <a class="btn secondary sm" id="expCsv" href="#">Export CSV</a>
+      <a class="btn secondary sm" id="expXlsx" href="#">Export XLSX</a>
+    <% } %>
+    <button class="btn secondary sm" id="autoBtn" type="button">Auto-refresh: off</button>
+  </div>
+
+  <% if (can('import:run')) { %>
+  <div class="toolbar" id="deleteBar" style="gap:10px;align-items:center;background:#d03b3b14;border:1px solid #d03b3b44;border-radius:10px;padding:8px 12px;margin-bottom:8px">
+    <span id="selInfo" class="muted" style="font-size:13px">Selected: <b>0</b></span>
+    <button class="btn secondary sm" id="delSelected" type="button" disabled>🗑 Delete selected</button>
+    <button class="btn secondary sm" id="delAll" type="button">🗑 Delete ALL <%= data.total %> matching filter</button>
+    <span class="muted" style="font-size:12px">Soft delete — rows are hidden (recoverable).</span>
+  </div>
+  <% } %>
+
+  <div style="overflow-x:auto">
+  <table id="regTable">
+    <thead><tr>
+      <% if (can('import:run')) { %><th style="width:28px"><input type="checkbox" id="chkAll" title="Select all on this page"></th><% } %>
+      <% columns.forEach(function(c){ %><th><a href="#" class="sortlink" data-col="<%= c.key %>"><%= c.label %></a></th><% }); %>
+      <th></th>
+    </tr></thead>
+    <tbody>
+      <% data.rows.forEach(function(r){ %>
+        <tr>
+          <% if (can('import:run')) { %><td><input type="checkbox" class="rowchk" value="<%= r.id %>"></td><% } %>
+          <% columns.forEach(function(c){ var val = c.get(r, { canUnmaskPii: canUnmaskPii }); %>
+            <td class="<%= c.numeric?'':'' %>">
+              <% if (c.key==='FastTestStatus') { %><%- badge(val || 'NOT_SYNCED') %><% if(r.isStale){ %> <span class="sev-<%= r.staleSeverity||'LOW' %>" title="Stale: <%= r.staleReason||'' %>">⚠</span><% } %>
+              <% } else if (c.key==='SyncStatus') { %><%- badge(val || 'PENDING') %>
+              <% } else if (c.key==='TestCode' || c.key==='StudentId') { %><span class="mono"><%= val===null?'—':val %></span>
+              <% } else { %><%= val===null||val===undefined?'—':val %><% } %>
+            </td>
+          <% }); %>
+          <td><a class="btn secondary sm" href="/registrations/<%= r.id %>">View</a></td>
+        </tr>
+      <% }); %>
+      <% if (data.rows.length===0){ %><tr><td colspan="<%= columns.length + (can('import:run')?2:1) %>" class="empty">No registrations match. Adjust filters or import data from the Import Center.</td></tr><% } %>
+    </tbody>
+  </table>
+  </div>
+
+  <div class="pager">
+    <span>Page <%= data.page %> of <%= data.totalPages %> · <%= data.total %> records</span>
+    <% var qp = new URLSearchParams(query); %>
+    <% if (data.page > 1) { qp.set('page', data.page-1); %><a class="btn secondary sm" href="/monitoring?<%= qp.toString() %>">← Prev</a><% } %>
+    <% if (data.page < data.totalPages) { qp.set('page', data.page+1); %><a class="btn secondary sm" href="/monitoring?<%= qp.toString() %>">Next →</a><% } %>
+  </div>
+</div>
+
+<script>
+(function(){
+  var ALL = <%- JSON.stringify(allColumns.map(function(c){return {key:c.key,label:c.label};})) %>;
+  var DEFAULTS = <%- JSON.stringify(allColumns.filter(function(c){return c.defaultVisible;}).map(function(c){return c.key;})) %>;
+  var selected = <%- JSON.stringify(selectedKeys) %>;
+  var params = new URLSearchParams(window.location.search);
+
+  function withCols(extra){
+    var p = new URLSearchParams(window.location.search);
+    p.set('columns', selected.join(','));
+    if (extra) Object.keys(extra).forEach(function(k){ p.set(k, extra[k]); });
+    return p.toString();
+  }
+  // Export links carry current filters + selected columns.
+  var expCsv = document.getElementById('expCsv'), expXlsx = document.getElementById('expXlsx');
+  if (expCsv) expCsv.href = '/export/registrations?preset=CURRENT_FILTER&format=csv&' + withCols();
+  if (expXlsx) expXlsx.href = '/export/registrations?preset=CURRENT_FILTER&format=xlsx&' + withCols();
+
+  // Sorting
+  document.querySelectorAll('.sortlink').forEach(function(a){
+    a.addEventListener('click', function(e){
+      e.preventDefault();
+      var col = a.dataset.col, cur = params.get('sortBy'), dir = params.get('sortDir')==='asc'?'desc':'asc';
+      window.location.search = withCols({ sortBy: col, sortDir: dir });
+    });
+  });
+
+  // Column selector panel
+  var colBtn = document.getElementById('colBtn'), colPanel = document.getElementById('colPanel');
+  function renderPanel(){
+    var ordered = selected.map(function(k){ return ALL.find(function(c){return c.key===k;}); }).filter(Boolean);
+    var rest = ALL.filter(function(c){ return selected.indexOf(c.key)<0; });
+    var html = '';
+    ordered.forEach(function(c, i){
+      html += '<label><input type="checkbox" checked data-k="'+c.key+'"> '+c.label+
+        ' <span style="margin-left:auto"><a href="#" data-up="'+c.key+'">▲</a> <a href="#" data-down="'+c.key+'">▼</a></span></label>';
+    });
+    rest.forEach(function(c){ html += '<label><input type="checkbox" data-k="'+c.key+'"> '+c.label+'</label>'; });
+    html += '<div class="toolbar" style="margin-top:8px"><button class="btn sm" id="colApply" type="button">Apply</button><button class="btn secondary sm" id="colReset" type="button">Defaults</button></div>';
+    colPanel.innerHTML = html;
+    colPanel.querySelectorAll('input[type=checkbox]').forEach(function(cb){
+      cb.addEventListener('change', function(){
+        var k = cb.dataset.k;
+        if (cb.checked && selected.indexOf(k)<0) selected.push(k);
+        if (!cb.checked) selected = selected.filter(function(x){return x!==k;});
+        renderPanel();
+      });
+    });
+    colPanel.querySelectorAll('[data-up]').forEach(function(a){ a.addEventListener('click', function(e){ e.preventDefault(); var k=a.dataset.up, i=selected.indexOf(k); if(i>0){ selected.splice(i-1,0,selected.splice(i,1)[0]); renderPanel(); } }); });
+    colPanel.querySelectorAll('[data-down]').forEach(function(a){ a.addEventListener('click', function(e){ e.preventDefault(); var k=a.dataset.down, i=selected.indexOf(k); if(i<selected.length-1){ selected.splice(i+1,0,selected.splice(i,1)[0]); renderPanel(); } }); });
+    document.getElementById('colApply').addEventListener('click', function(){ window.location.search = withCols(); });
+    document.getElementById('colReset').addEventListener('click', function(){ selected = DEFAULTS.slice(); window.location.search = withCols(); });
+  }
+  colBtn.addEventListener('click', function(){ if(colPanel.style.display==='none'){ renderPanel(); colPanel.style.display='block'; } else { colPanel.style.display='none'; } });
+
+  // Manual sync by TestCode
+  var msBtn = document.getElementById('msBtn');
+  if (msBtn) msBtn.addEventListener('click', async function(){
+    var code = (document.getElementById('msCode').value||'').trim();
+    var out = document.getElementById('msResult');
+    if(!code){ out.textContent='Enter a Test Code first.'; return; }
+    msBtn.disabled=true; out.style.color='var(--muted,#8a897f)'; out.textContent='Syncing '+code+' …';
+    try{
+      var r = await fetch('/api/registrations/sync-by-code', {method:'POST', headers:{'Content-Type':'application/json','Accept':'application/json'}, body: JSON.stringify({testCode: code})});
+      var d = await r.json();
+      if (r.ok && d.ok){ out.style.color='#0ca30c'; out.textContent='✓ Synced '+(d.testCode||code)+' → '+(d.dashboardStatus||'done'); setTimeout(function(){ location.reload(); }, 1200); }
+      else { out.style.color='#d03b3b'; out.textContent='✗ '+(d.error || ('failed'+(d.errorType?' ('+d.errorType+')':''))); }
+    }catch(e){ out.style.color='#d03b3b'; out.textContent='✗ request failed'; }
+    finally{ msBtn.disabled=false; }
+  });
+
+  // Row selection + bulk soft-delete
+  var chkAll = document.getElementById('chkAll');
+  var delSelBtn = document.getElementById('delSelected');
+  var delAllBtn = document.getElementById('delAll');
+  function selectedIds(){ return Array.prototype.slice.call(document.querySelectorAll('.rowchk:checked')).map(function(c){return c.value;}); }
+  function refreshSel(){
+    var n = selectedIds().length;
+    var info = document.getElementById('selInfo'); if(info) info.innerHTML = 'Selected: <b>'+n+'</b>';
+    if(delSelBtn) delSelBtn.disabled = n===0;
+  }
+  if (chkAll) chkAll.addEventListener('change', function(){ document.querySelectorAll('.rowchk').forEach(function(c){ c.checked = chkAll.checked; }); refreshSel(); });
+  document.querySelectorAll('.rowchk').forEach(function(c){ c.addEventListener('change', refreshSel); });
+  async function doDelete(body){
+    var r = await fetch('/api/registrations/delete'+window.location.search, {method:'POST', headers:{'Content-Type':'application/json','Accept':'application/json'}, body: JSON.stringify(body)});
+    var d = await r.json();
+    if (r.ok && d.ok){ alert('Deleted '+d.deleted+' registration(s).'); location.reload(); }
+    else alert('Delete failed: '+(d.error||'error'));
+  }
+  if (delSelBtn) delSelBtn.addEventListener('click', function(){
+    var ids = selectedIds(); if(!ids.length) return;
+    if(!confirm('Delete '+ids.length+' selected registration(s)? (soft delete — recoverable)')) return;
+    doDelete({ ids: ids });
+  });
+  if (delAllBtn) delAllBtn.addEventListener('click', function(){
+    var total = <%= data.total %>;
+    if(!confirm('Delete ALL '+total+' registrations matching the CURRENT FILTER? (soft delete — recoverable)')) return;
+    if(!confirm('Are you sure? This affects '+total+' rows.')) return;
+    doDelete({ allMatching: true });
+  });
+
+  // Auto-refresh (reads DB only; never calls FastTest)
+  var autoBtn = document.getElementById('autoBtn'); var timer=null;
+  autoBtn.addEventListener('click', function(){
+    if (timer){ clearInterval(timer); timer=null; autoBtn.textContent='Auto-refresh: off'; }
+    else { timer=setInterval(function(){ location.reload(); }, 30000); autoBtn.textContent='Auto-refresh: 30s'; }
+  });
+})();
+</script>
+
+<%- include('partials/foot') %>

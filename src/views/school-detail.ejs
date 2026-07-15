@@ -1,0 +1,65 @@
+<%- include('partials/head') %>
+<%- include('partials/nav') %>
+
+<div class="toolbar">
+  <a href="/schools">← Schools Dashboard</a>
+  <% if (principal.permissions.has('attention:view')) { %><a class="btn secondary sm" href="/attention?schoolId=<%= school.id %>">Students requiring attention</a><% } %>
+  <% if (principal.permissions.has('export:run')) { %><a class="btn secondary sm" href="/export/registrations?preset=CURRENT_FILTER&format=xlsx&schoolId=<%= school.id %>">Export school (XLSX)</a><% } %>
+</div>
+
+<div class="panel">
+  <h2><%= school.name %> <span class="muted mono">(<%= school.externalId %>)</span></h2>
+  <div class="kpis" style="margin-bottom:0">
+    <div class="kpi info"><div class="label">Total Registered</div><div class="value"><%= kpis.totalRegistered %></div></div>
+    <div class="kpi ok"><div class="label">Completed</div><div class="value"><%= kpis.COMPLETED %></div></div>
+    <div class="kpi warn"><div class="label">In Progress</div><div class="value"><%= kpis.IN_PROGRESS %></div></div>
+    <div class="kpi ok"><div class="label">Completion Rate</div><div class="value"><%= kpis.completionRate %>%</div></div>
+    <div class="kpi err"><div class="label">Sync Errors</div><div class="value"><%= kpis.syncErrors %></div></div>
+    <div class="kpi"><div class="label">Avg Time Used</div><div class="value"><%= kpis.avgTimeUsedSeconds===null?'—':Math.round(kpis.avgTimeUsedSeconds/60)+'m' %></div></div>
+    <div class="kpi"><div class="label">Avg Raw Score</div><div class="value"><%= kpis.avgRawScore===null?'—':kpis.avgRawScore %></div></div>
+  </div>
+</div>
+
+<div class="grid2">
+  <div class="panel"><h2>Status Distribution</h2><%- include('partials/statusbar', { counts: statusDist.counts, total: statusDist.total }) %></div>
+  <div class="panel"><h2>Completion % by Grade</h2><%- include('partials/hbars', { bars: byGrade.map(function(g){return {label:'Grade '+g.grade, value:g.completionRate};}), unit:'%', pct:true }) %></div>
+</div>
+
+<div class="panel">
+  <h2>Subjects</h2>
+  <table>
+    <thead><tr><th>Subject</th><th>Total</th><th>Completed</th><th>Completion</th><th>Avg Score</th><th>Avg Duration</th></tr></thead>
+    <tbody>
+      <% bySubject.forEach(function(s){ %>
+        <tr><td><a href="/subjects/<%= encodeURIComponent(s.examSubject) %>"><%= s.examSubject %></a></td><td><%= s.total %></td><td><%= s.COMPLETED %></td>
+          <td><%= s.completionRate %>%</td><td><%= s.avgRawScore===null?'—':s.avgRawScore %></td><td><%= s.avgTimeUsed===null?'—':Math.round(s.avgTimeUsed/60)+'m' %></td></tr>
+      <% }); %>
+      <% if (bySubject.length===0){ %><tr><td colspan="6" class="empty">No subjects</td></tr><% } %>
+    </tbody>
+  </table>
+</div>
+
+<div class="panel">
+  <h2>Registrations</h2>
+  <div style="overflow-x:auto">
+  <table>
+    <thead><tr><th>StudentId</th><th>Name (EN)</th><th>Grade</th><th>Class</th><th>Subject</th><th>TestCode</th><th>Status</th><th>Sync</th><th></th></tr></thead>
+    <tbody>
+      <% students.rows.forEach(function(r){ %>
+        <tr><td class="mono"><%= r.studentExternalId %></td><td><%= r.student && r.student.nameEnglish || '—' %></td>
+          <td><%= r.grade || '—' %></td><td><%= r.classCode || '—' %></td><td><%= r.examSubject %></td>
+          <td class="mono"><%= r.testCodeOriginal %></td><td><span class="status <%= r.dashboardStatus %>"><%= r.dashboardStatus.replace('_',' ') %></span></td>
+          <td><span class="status <%= r.syncStatus %>"><%= r.syncStatus %></span></td>
+          <td><a class="btn secondary sm" href="/registrations/<%= r.id %>">View</a></td></tr>
+      <% }); %>
+      <% if (students.rows.length===0){ %><tr><td colspan="9" class="empty">No registrations</td></tr><% } %>
+    </tbody>
+  </table>
+  </div>
+  <div class="pager"><span>Page <%= students.page %> of <%= students.totalPages %> · <%= students.total %> records</span>
+    <% if (students.page>1){ %><a class="btn secondary sm" href="/schools/<%= school.id %>?page=<%= students.page-1 %>">← Prev</a><% } %>
+    <% if (students.page<students.totalPages){ %><a class="btn secondary sm" href="/schools/<%= school.id %>?page=<%= students.page+1 %>">Next →</a><% } %>
+  </div>
+</div>
+
+<%- include('partials/foot') %>

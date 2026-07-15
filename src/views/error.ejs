@@ -1,0 +1,9 @@
+<%- include('partials/head') %>
+<% if (principal) { %>
+  <%- include('partials/nav', { nav: '' }) %>
+  <div class="panel"><h2><%= title %></h2><p class="muted"><%= message %></p><a href="/">← Back to dashboard</a></div>
+  <%- include('partials/foot') %>
+<% } else { %>
+  <div class="login-wrap"><div class="login-card"><h1><%= title %></h1><p><%= message %></p><a href="/login">Go to sign in</a></div></div>
+  </body></html>
+<% } %>

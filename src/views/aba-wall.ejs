@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ABA Program — Analytics</title>
+  <style>
+    :root{
+      --bg:#0a0c12; --card:#12151f; --card2:#161a26; --line:#232838; --line2:#2c3245;
+      --ink:#f4f6fb; --muted:#a7adc0; --dim:#6c7288;
+      --c1:#5b8def; --c2:#22c9a8; --c3:#f5b544; --c4:#e5735b; --c5:#9b7be8;
+      --good:#22c9a8; --warn:#f5b544; --bad:#e5735b;
+      --grad1:linear-gradient(135deg,#5b8def,#9b7be8); --grad2:linear-gradient(135deg,#22c9a8,#5b8def);
+      --grad3:linear-gradient(135deg,#f5b544,#e5735b); --grad4:linear-gradient(135deg,#9b7be8,#e5735b);
+    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    html,body{height:100%}
+    body{
+      background:radial-gradient(1200px 700px at 15% -10%, #1a2036 0%, transparent 55%),
+                 radial-gradient(1000px 600px at 100% 0%, #1d1730 0%, transparent 50%), var(--bg);
+      color:var(--ink);font-family:"Segoe UI",-apple-system,BlinkMacSystemFont,Roboto,Helvetica,Arial,sans-serif;
+      overflow:hidden;display:flex;flex-direction:column;height:100vh;padding:18px 20px;gap:14px;
+      -webkit-font-smoothing:antialiased;
+    }
+    .muted{color:var(--muted)} .dim{color:var(--dim)}
+    /* header */
+    header{display:flex;align-items:center;gap:16px;flex:0 0 auto}
+    .badge{background:var(--grad1);color:#fff;font-weight:800;font-size:15px;letter-spacing:.5px;padding:6px 14px;border-radius:9px;box-shadow:0 6px 20px -6px #5b8def88}
+    .title{font-size:23px;font-weight:800;letter-spacing:.2px}
+    .title small{display:block;font-size:12px;font-weight:500;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-top:2px}
+    header .spacer{flex:1}
+    .live{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted);background:var(--card);border:1px solid var(--line);padding:7px 13px;border-radius:999px}
+    .live .d{width:9px;height:9px;border-radius:50%;background:var(--good);box-shadow:0 0 12px var(--good);animation:pulse 1.8s infinite}
+    @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.8)}}
+    #clock{font-variant-numeric:tabular-nums;font-size:22px;font-weight:700;letter-spacing:.5px}
+    /* hero cards */
+    .hero{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;flex:0 0 auto}
+    .kpi{position:relative;background:linear-gradient(180deg,var(--card2),var(--card));border:1px solid var(--line);border-radius:18px;padding:18px 20px;overflow:hidden}
+    .kpi::before{content:'';position:absolute;inset:0 auto 0 0;width:4px;border-radius:4px}
+    .kpi.a::before{background:var(--grad1)} .kpi.b::before{background:var(--grad2)} .kpi.c::before{background:var(--grad3)} .kpi.d::before{background:var(--grad4)}
+    .kpi .ic{position:absolute;top:16px;right:18px;font-size:26px;opacity:.5}
+    .kpi .lab{font-size:13px;color:var(--muted);font-weight:600;letter-spacing:.4px;text-transform:uppercase}
+    .kpi .val{font-size:clamp(30px,3.8vw,52px);font-weight:800;line-height:1.02;margin-top:8px;font-variant-numeric:tabular-nums;letter-spacing:-1px}
+    .kpi .sub{font-size:12.5px;color:var(--dim);margin-top:6px}
+    /* grid */
+    .grid{flex:1 1 auto;display:grid;grid-template-columns:0.85fr 1.3fr 0.85fr;grid-template-rows:1fr 1fr;gap:14px;min-height:0}
+    .panel{background:linear-gradient(180deg,var(--card2),var(--card));border:1px solid var(--line);border-radius:18px;padding:16px 18px;display:flex;flex-direction:column;min-height:0}
+    .panel h3{font-size:12.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;flex:0 0 auto;display:flex;align-items:center;gap:8px}
+    .panel .body{flex:1;min-height:0;overflow:auto}
+    .span2{grid-row:span 2}
+    /* donut */
+    .donut-wrap{display:flex;align-items:center;justify-content:center;gap:18px;flex:1}
+    .donut{position:relative;width:min(24vh,180px);aspect-ratio:1;flex:0 0 auto}
+    .donut svg{transform:rotate(-90deg);width:100%;height:100%}
+    .donut .mid{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
+    .donut .mid .n{font-size:clamp(24px,3vw,36px);font-weight:800;font-variant-numeric:tabular-nums}
+    .donut .mid .t{font-size:11px;color:var(--dim);text-transform:uppercase;letter-spacing:1px}
+    .dlegend{display:flex;flex-direction:column;gap:9px;font-size:13.5px}
+    .dlegend .r{display:flex;align-items:center;gap:9px}
+    .dlegend .sw{width:11px;height:11px;border-radius:3px}
+    .dlegend .nm{color:var(--muted)} .dlegend .ct{margin-left:auto;font-weight:800;font-variant-numeric:tabular-nums}
+    /* histogram */
+    .hist{display:flex;align-items:flex-end;gap:10px;flex:1;padding:10px 4px 0}
+    .hbar{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:6px;height:100%}
+    .hbar .fill{width:100%;border-radius:8px 8px 3px 3px;background:var(--grad2);min-height:3px;transition:height .8s cubic-bezier(.2,.8,.2,1);position:relative}
+    .hbar .v{font-size:13px;font-weight:800;font-variant-numeric:tabular-nums}
+    .hbar .l{font-size:11px;color:var(--dim)}
+    /* ranked bars */
+    .rrow{margin:10px 0}
+    .rrow .top{display:flex;justify-content:space-between;font-size:13.5px;margin-bottom:5px}
+    .rrow .top .nm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:75%}
+    .rrow .top .pc{font-weight:800;font-variant-numeric:tabular-nums}
+    .rrow .track{height:9px;background:#0c0e16;border-radius:6px;overflow:hidden}
+    .rrow .track>span{display:block;height:100%;border-radius:6px;transition:width .8s cubic-bezier(.2,.8,.2,1)}
+    /* answers mini */
+    .answers{display:flex;flex-direction:column;gap:12px;flex:1;justify-content:center}
+    .ans{display:flex;align-items:center;gap:12px}
+    .ans .bar{flex:1;height:12px;background:#0c0e16;border-radius:6px;overflow:hidden}
+    .ans .bar>span{display:block;height:100%;border-radius:6px}
+    .ans .lab{font-size:13px;color:var(--muted);width:74px}
+    .ans .v{font-weight:800;font-variant-numeric:tabular-nums;width:66px;text-align:right}
+  </style>
+</head>
+<body>
+  <header>
+    <span class="badge">ABA</span>
+    <div class="title">Program Analytics<small>Students · Exams · Schools</small></div>
+    <div class="spacer"></div>
+    <div class="live"><span class="d"></span><span id="upd">live</span></div>
+    <div id="clock">--:--:--</div>
+  </header>
+
+  <section class="hero">
+    <div class="kpi a"><span class="ic">👥</span><div class="lab">Students</div><div class="val" id="k-students">—</div><div class="sub" id="k-students-sub">by Emirates ID</div></div>
+    <div class="kpi b"><span class="ic">📝</span><div class="lab">Exam Sittings</div><div class="val" id="k-total">—</div><div class="sub" id="k-total-sub">—</div></div>
+    <div class="kpi c"><span class="ic">✅</span><div class="lab">Completion</div><div class="val" id="k-comp">—</div><div class="sub" id="k-comp-sub">—</div></div>
+    <div class="kpi d"><span class="ic">🎯</span><div class="lab">Avg Score</div><div class="val" id="k-score">—</div><div class="sub" id="k-score-sub">—</div></div>
+  </section>
+
+  <section class="grid">
+    <div class="panel">
+      <h3>📊 Participation Status</h3>
+      <div class="donut-wrap">
+        <div class="donut">
+          <svg viewBox="0 0 42 42" id="donut"></svg>
+          <div class="mid"><div class="n" id="donut-pc">—</div><div class="t">completed</div></div>
+        </div>
+        <div class="dlegend body" id="dlegend"></div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h3>🎓 Score Distribution</h3>
+      <div class="hist" id="hist"></div>
+    </div>
+
+    <div class="panel">
+      <h3>🧩 Answer Breakdown</h3>
+      <div class="answers" id="answers"></div>
+    </div>
+
+    <div class="panel">
+      <h3>📚 Top Exams — Completion</h3>
+      <div class="body" id="exams"></div>
+    </div>
+
+    <div class="panel span2" style="grid-column:2 / span 1">
+      <h3>🏫 Top Schools — Completion & Participation</h3>
+      <div class="body" id="schools"></div>
+    </div>
+
+    <div class="panel">
+      <h3>⏱ Performance</h3>
+      <div class="body" id="perf"></div>
+    </div>
+  </section>
+
+  <script>
+    var Q='?programType=ABA';
+    var STATUS=[
+      {k:'COMPLETED',nm:'Completed',c:'#22c9a8'},
+      {k:'IN_PROGRESS',nm:'In Progress',c:'#f5b544'},
+      {k:'NOT_STARTED',nm:'Not Started',c:'#5b8def'},
+      {k:'NOT_SYNCED',nm:'Not Synced',c:'#5a6076'}
+    ];
+    var fmt=function(n){return (n==null||isNaN(n))?'—':Number(n).toLocaleString('en-US');};
+    var pct=function(n,d){return d>0?Math.round(n/d*1000)/10:0;};
+    function tick(){document.getElementById('clock').textContent=new Date().toLocaleTimeString('en-GB');}
+    setInterval(tick,1000);tick();
+    async function j(u){var r=await fetch(u,{headers:{Accept:'application/json'}});if(!r.ok)throw 0;return r.json();}
+
+    // animated counter
+    function animate(el, to, suffix){
+      suffix=suffix||''; var from=parseFloat((el.getAttribute('data-v')||'0'));
+      if(from===to){ el.textContent=fmt(to)+suffix; return; }
+      el.setAttribute('data-v', to); var start=performance.now(), dur=700;
+      function step(t){ var p=Math.min(1,(t-start)/dur); var e=1-Math.pow(1-p,3);
+        var cur=from+(to-from)*e; el.textContent=(to%1===0?fmt(Math.round(cur)):(Math.round(cur*10)/10))+suffix; if(p<1)requestAnimationFrame(step); }
+      requestAnimationFrame(step);
+    }
+
+    async function load(){
+      try{
+        var ov,subj,sch,scores;
+        [ov,subj,sch,scores]=await Promise.all([
+          j('/api/dashboard/overview'+Q), j('/api/dashboard/subjects'+Q),
+          j('/api/dashboard/schools'+Q).catch(function(){return {schools:[]};}),
+          j('/api/dashboard/scores'+Q).catch(function(){return null;})
+        ]);
+        document.getElementById('upd').textContent='updated '+new Date().toLocaleTimeString('en-GB');
+        var total=ov.totalRegistered||0, students=ov.studentCount!=null?ov.studentCount:total;
+        var schools=(sch&&sch.schools)?sch.schools:[];
+
+        animate(document.getElementById('k-students'), students);
+        document.getElementById('k-students-sub').textContent='avg '+(students>0?(Math.round(total/students*10)/10):'—')+' exams / student';
+        animate(document.getElementById('k-total'), total);
+        document.getElementById('k-total-sub').textContent=(subj.subjects?subj.subjects.length:0)+' exam types · '+schools.length+' schools';
+        animate(document.getElementById('k-comp'), ov.completionRate||0, '%');
+        document.getElementById('k-comp-sub').textContent=fmt(ov.COMPLETED)+' of '+fmt(total)+' completed';
+        animate(document.getElementById('k-score'), ov.avgRawScore||0);
+        document.getElementById('k-score-sub').textContent='scaled '+(ov.avgScaledScore!=null?ov.avgScaledScore:'—')+' · avg time '+(ov.avgTimeUsedSeconds!=null?Math.round(ov.avgTimeUsedSeconds/60)+'m':'—');
+
+        // donut
+        var dsvg=document.getElementById('donut'); dsvg.innerHTML='';
+        var off=0, C=100;
+        STATUS.forEach(function(s){
+          var v=ov[s.k]||0, frac=total>0?(v/total*C):0;
+          var c=document.createElementNS('http://www.w3.org/2000/svg','circle');
+          c.setAttribute('cx','21');c.setAttribute('cy','21');c.setAttribute('r','15.9');
+          c.setAttribute('fill','none');c.setAttribute('stroke',s.c);c.setAttribute('stroke-width','5.6');
+          c.setAttribute('stroke-dasharray',frac.toFixed(2)+' '+(C-frac).toFixed(2));
+          c.setAttribute('stroke-dashoffset',(-off).toFixed(2)); off+=frac; dsvg.appendChild(c);
+        });
+        document.getElementById('donut-pc').textContent=pct(ov.COMPLETED,total)+'%';
+        var dl=document.getElementById('dlegend'); dl.innerHTML='';
+        STATUS.forEach(function(s){ var v=ov[s.k]||0;
+          var r=document.createElement('div');r.className='r';
+          r.innerHTML='<span class="sw" style="background:'+s.c+'"></span><span class="nm">'+s.nm+'</span><span class="ct">'+fmt(v)+'</span>';
+          dl.appendChild(r);
+        });
+
+        // histogram
+        var dist=(scores&&scores.distribution)?scores.distribution.filter(function(b){return b.count>0;}):[];
+        var hmax=Math.max.apply(null,dist.map(function(b){return b.count;}).concat([1]));
+        var hist=document.getElementById('hist'); hist.innerHTML='';
+        dist.forEach(function(b){
+          var h=Math.max(3,b.count/hmax*100);
+          var d=document.createElement('div');d.className='hbar';
+          d.innerHTML='<div class="v">'+fmt(b.count)+'</div><div class="fill" style="height:'+h+'%"></div><div class="l">'+b.label+'</div>';
+          hist.appendChild(d);
+        });
+
+        // answers
+        var cis=(scores&&scores.correctIncorrectSkipped)?scores.correctIncorrectSkipped:{correct:ov.correct,incorrect:ov.incorrect,skipped:ov.skipped};
+        var ct=(cis.correct||0)+(cis.incorrect||0)+(cis.skipped||0);
+        var A=[{nm:'Correct',v:cis.correct||0,c:'#22c9a8'},{nm:'Incorrect',v:cis.incorrect||0,c:'#e5735b'},{nm:'Skipped',v:cis.skipped||0,c:'#f5b544'}];
+        var an=document.getElementById('answers'); an.innerHTML='';
+        A.forEach(function(a){
+          var row=document.createElement('div');row.className='ans';
+          row.innerHTML='<span class="lab">'+a.nm+'</span><span class="bar"><span style="width:'+pct(a.v,ct)+'%;background:'+a.c+'"></span></span><span class="v" style="color:'+a.c+'">'+fmt(a.v)+'</span>';
+          an.appendChild(row);
+        });
+
+        // exams (gradient bars)
+        var grads=['linear-gradient(90deg,#5b8def,#9b7be8)','linear-gradient(90deg,#22c9a8,#5b8def)','linear-gradient(90deg,#f5b544,#e5735b)','linear-gradient(90deg,#9b7be8,#e5735b)'];
+        var ex=document.getElementById('exams'); ex.innerHTML='';
+        (subj.subjects||[]).slice().sort(function(a,b){return b.total-a.total;}).slice(0,6).forEach(function(s,i){
+          var cr=s.completionRate!=null?s.completionRate:pct(s.COMPLETED,s.total);
+          var row=document.createElement('div');row.className='rrow';
+          row.innerHTML='<div class="top"><span class="nm" title="'+s.examSubject+'">'+s.examSubject+'</span><span class="pc">'+cr+'%</span></div>'+
+            '<div class="track"><span style="width:'+cr+'%;background:'+grads[i%4]+'"></span></div>';
+          ex.appendChild(row);
+        });
+
+        // schools
+        var sd=document.getElementById('schools'); sd.innerHTML='';
+        var ranked=schools.filter(function(s){return (s.total||0)>=10;}).sort(function(a,b){return (b.completionRate||0)-(a.completionRate||0);}).slice(0,10);
+        if(!ranked.length) ranked=schools.slice(0,10);
+        ranked.forEach(function(s,i){
+          var cr=s.completionRate!=null?s.completionRate:0;
+          var row=document.createElement('div');row.className='rrow';
+          row.innerHTML='<div class="top"><span class="nm" title="'+(s.schoolName||'')+'">'+(i+1)+'. '+(s.schoolName||'—')+'</span><span class="pc">'+cr+'% · '+fmt(s.total)+'</span></div>'+
+            '<div class="track"><span style="width:'+cr+'%;background:'+grads[i%4]+'"></span></div>';
+          sd.appendChild(row);
+        });
+
+        // performance mini metrics
+        var pf=document.getElementById('perf'); pf.innerHTML='';
+        var P=[
+          {l:'Avg Scaled Score', v:(ov.avgScaledScore!=null?ov.avgScaledScore:'—')},
+          {l:'Avg Time / Exam', v:(ov.avgTimeUsedSeconds!=null?Math.round(ov.avgTimeUsedSeconds/60)+'m':'—')},
+          {l:'Not Synced', v:fmt(ov.NOT_SYNCED)},
+          {l:'API Success', v:(ov.apiSuccessRate!=null?ov.apiSuccessRate+'%':'—')}
+        ];
+        P.forEach(function(p){
+          var row=document.createElement('div');row.style.cssText='display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-bottom:1px solid var(--line)';
+          row.innerHTML='<span class="muted" style="font-size:13.5px">'+p.l+'</span><b style="font-size:19px;font-variant-numeric:tabular-nums">'+p.v+'</b>';
+          pf.appendChild(row);
+        });
+      }catch(e){}
+    }
+    load(); setInterval(load,5000);
+  </script>
+</body>
+</html>

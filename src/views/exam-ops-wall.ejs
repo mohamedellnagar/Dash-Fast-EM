@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Exam Operations — Live</title>
+  <style>
+    :root{
+      --bg:#0a0c11; --card:#12151e; --card2:#161a25; --line:#232a3a; --line2:#2f374a;
+      --ink:#f2f5fc; --muted:#9ea5ba; --dim:#666d84;
+      --live:#f0b429; --done:#26c281; --wait:#4c8dff; --none:#5a6076; --bad:#e05260; --violet:#9b7be8;
+    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    html,body{height:100%}
+    body{background:radial-gradient(1100px 640px at 12% -12%,#182036 0,transparent 55%),
+                   radial-gradient(900px 520px at 100% 0,#1c1730 0,transparent 50%),var(--bg);
+      color:var(--ink);font-family:"Segoe UI",-apple-system,BlinkMacSystemFont,Roboto,Helvetica,Arial,sans-serif;
+      overflow:hidden;display:flex;flex-direction:column;height:100vh;padding:18px 20px;gap:14px;-webkit-font-smoothing:antialiased}
+    .muted{color:var(--muted)}.dim{color:var(--dim)}
+    header{display:flex;align-items:center;gap:15px;flex:0 0 auto}
+    .logo{width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg,#4c8dff,#9b7be8);display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:0 8px 22px -8px #4c8dffaa}
+    .htitle{font-size:22px;font-weight:800}
+    .htitle small{display:block;font-size:11.5px;font-weight:500;color:var(--muted);letter-spacing:1.6px;text-transform:uppercase;margin-top:2px}
+    header .spacer{flex:1}
+    .pill{display:inline-flex;align-items:center;gap:8px;padding:6px 13px;border-radius:999px;font-size:13px;font-weight:700;border:1px solid var(--line);background:var(--card)}
+    .pill.badge{background:linear-gradient(135deg,#4c8dff,#9b7be8);border:none;color:#fff}
+    .live-d{width:9px;height:9px;border-radius:50%;background:var(--done);box-shadow:0 0 12px var(--done);animation:pulse 1.7s infinite}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+    #clock{font-variant-numeric:tabular-nums;font-size:22px;font-weight:700}
+    /* hero */
+    .hero{display:grid;grid-template-columns:1.4fr 1fr 1fr 1fr 1fr;gap:14px;flex:0 0 auto}
+    .kpi{position:relative;background:linear-gradient(180deg,var(--card2),var(--card));border:1px solid var(--line);border-radius:16px;padding:16px 18px;overflow:hidden}
+    .kpi .lab{font-size:12.5px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.5px}
+    .kpi .val{font-size:clamp(28px,3.6vw,50px);font-weight:800;line-height:1;margin-top:7px;font-variant-numeric:tabular-nums;letter-spacing:-1px}
+    .kpi .sub{font-size:12px;color:var(--dim);margin-top:5px}
+    .kpi.hero-main{background:linear-gradient(135deg,#16233d,#141a28)}
+    .kpi.live .val{color:var(--live)} .kpi.done .val{color:var(--done)} .kpi.wait .val{color:var(--wait)}
+    .kpi .ring{position:absolute;right:14px;top:50%;transform:translateY(-50%);width:66px;height:66px}
+    .kpi.live .lab::before{content:'● ';color:var(--live);animation:pulse 1.4s infinite}
+    /* progress */
+    .prog{background:linear-gradient(180deg,var(--card2),var(--card));border:1px solid var(--line);border-radius:16px;padding:15px 20px;flex:0 0 auto}
+    .prog .top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:10px}
+    .prog .top .t{font-size:13px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.7px}
+    .prog .top .n{font-size:15px;font-weight:700}
+    .track-lg{height:22px;background:#0a0c12;border-radius:12px;overflow:hidden;display:flex;gap:2px}
+    .track-lg>span{display:block;height:100%;transition:width .8s cubic-bezier(.2,.8,.2,1)}
+    /* grid */
+    .grid{flex:1 1 auto;display:grid;grid-template-columns:1fr 1fr 1fr;grid-template-rows:1fr 1fr;gap:14px;min-height:0}
+    /* mini bars for analytics */
+    .mbars{display:flex;align-items:flex-end;gap:5px;flex:1;padding-top:8px}
+    .mbars .b{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px;height:100%}
+    .mbars .b .f{width:100%;border-radius:5px 5px 2px 2px;min-height:2px;transition:height .7s cubic-bezier(.2,.8,.2,1)}
+    .mbars .b .v{font-size:11px;font-weight:700;font-variant-numeric:tabular-nums}
+    .mbars .b .l{font-size:9.5px;color:var(--dim);white-space:nowrap}
+    .flag{display:flex;align-items:center;gap:10px;background:#e0526014;border:1px solid #e0526033;border-radius:10px;padding:10px 12px;margin-bottom:10px}
+    .flag .big{font-size:24px;font-weight:800;color:var(--bad);font-variant-numeric:tabular-nums}
+    .panel{background:linear-gradient(180deg,var(--card2),var(--card));border:1px solid var(--line);border-radius:16px;padding:15px 17px;display:flex;flex-direction:column;min-height:0}
+    .panel h3{font-size:12.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;display:flex;align-items:center;gap:8px;flex:0 0 auto}
+    .panel h3 .tagr{margin-left:auto;font-size:11px;padding:2px 9px;border-radius:6px;font-weight:700}
+    .panel .body{flex:1;min-height:0;overflow:auto}
+    .row{display:grid;grid-template-columns:1fr auto;gap:6px 10px;align-items:center;margin:9px 0}
+    .row .nm{font-size:13.5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .row .nm .rk{color:var(--dim);font-weight:700;margin-right:6px}
+    .row .pc{font-weight:800;font-variant-numeric:tabular-nums;font-size:13.5px}
+    .row .track{grid-column:1 / -1;height:8px;background:#0a0c12;border-radius:5px;overflow:hidden}
+    .row .track>span{display:block;height:100%;border-radius:5px;transition:width .8s cubic-bezier(.2,.8,.2,1)}
+    .row .meta{grid-column:1 / -1;font-size:11px;color:var(--dim)}
+    .attn .pc{color:var(--bad)} .lead .pc{color:var(--done)}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo">📋</div>
+    <div class="htitle">Exam Operations<small>Live monitoring &amp; delivery control</small></div>
+    <span class="pill badge" id="scope">ABA</span>
+    <div class="spacer"></div>
+    <span class="pill"><span class="live-d"></span><span id="upd">live</span></span>
+    <div id="clock">--:--:--</div>
+  </header>
+
+  <section class="hero">
+    <div class="kpi hero-main">
+      <div class="lab">Overall Completion</div>
+      <div class="val" id="k-comp">—</div>
+      <div class="sub" id="k-comp-sub">—</div>
+    </div>
+    <div class="kpi live"><div class="lab">Sitting Now</div><div class="val" id="k-live">—</div><div class="sub">in progress</div></div>
+    <div class="kpi done"><div class="lab">Completed</div><div class="val" id="k-done">—</div><div class="sub" id="k-done-sub">exam sittings</div></div>
+    <div class="kpi wait"><div class="lab">Not Started</div><div class="val" id="k-wait">—</div><div class="sub">awaiting</div></div>
+    <div class="kpi"><div class="lab">Students · Schools</div><div class="val" id="k-students">—</div><div class="sub" id="k-schools">—</div></div>
+  </section>
+
+  <div class="prog">
+    <div class="top"><span class="t">Delivery Progress</span><span class="n" id="p-txt">—</span></div>
+    <div class="track-lg" id="p-bar"></div>
+  </div>
+
+  <section class="grid">
+    <div class="panel">
+      <h3>📚 Exam Types — Progress</h3>
+      <div class="body" id="exams"></div>
+    </div>
+
+    <div class="panel">
+      <h3>🏫 Schools Needing Follow-up <span class="tagr" style="background:#e0526022;color:#e05260">lowest completion</span></h3>
+      <div class="body attn" id="laggards"></div>
+    </div>
+
+    <div class="panel">
+      <h3>🏆 Leading Schools <span class="tagr" style="background:#26c28122;color:#26c281">highest completion</span></h3>
+      <div class="body lead" id="leaders"></div>
+    </div>
+
+    <div class="panel">
+      <h3>⏱️ Time &amp; Integrity</h3>
+      <div class="flag"><span class="big" id="a-rapid">—</span><div><div style="font-weight:700;font-size:13px">Rapid completions</div><div class="dim" style="font-size:11.5px" id="a-rapid-sub">finished &lt; 2 min — review</div></div></div>
+      <div class="mbars" id="a-time"></div>
+    </div>
+
+    <div class="panel">
+      <h3>🕐 Activity by Hour</h3>
+      <div class="mbars" id="a-hour"></div>
+    </div>
+
+    <div class="panel">
+      <h3>📉 Daily Completion Velocity</h3>
+      <div class="mbars" id="a-daily"></div>
+    </div>
+  </section>
+
+  <script>
+    var Q='?programType=ABA';
+    var SEG=[
+      {k:'COMPLETED',nm:'Completed',c:'#26c281'},
+      {k:'IN_PROGRESS',nm:'In Progress',c:'#f0b429'},
+      {k:'NOT_STARTED',nm:'Not Started',c:'#4c8dff'},
+      {k:'NOT_SYNCED',nm:'Not Synced',c:'#5a6076'}
+    ];
+    var fmt=function(n){return (n==null||isNaN(n))?'—':Number(n).toLocaleString('en-US');};
+    var pct=function(n,d){return d>0?Math.round(n/d*1000)/10:0;};
+    function tick(){document.getElementById('clock').textContent=new Date().toLocaleTimeString('en-GB');}
+    setInterval(tick,1000);tick();
+    async function j(u){var r=await fetch(u,{headers:{Accept:'application/json'}});if(!r.ok)throw 0;return r.json();}
+    var grads=['linear-gradient(90deg,#4c8dff,#9b7be8)','linear-gradient(90deg,#26c281,#4c8dff)','linear-gradient(90deg,#f0b429,#e05260)','linear-gradient(90deg,#9b7be8,#e05260)'];
+
+    function schoolRow(container,s,i,lead){
+      var cr=s.completionRate!=null?s.completionRate:pct(s.COMPLETED,s.total);
+      var barc = lead?'linear-gradient(90deg,#26c281,#4c8dff)':'linear-gradient(90deg,#e05260,#f0b429)';
+      var row=document.createElement('div');row.className='row';
+      row.innerHTML='<span class="nm"><span class="rk">'+(i+1)+'</span>'+(s.schoolName||'—')+'</span>'+
+        '<span class="pc">'+cr+'%</span>'+
+        '<span class="track"><span style="width:'+cr+'%;background:'+barc+'"></span></span>'+
+        '<span class="meta">'+fmt(s.COMPLETED||0)+' of '+fmt(s.total||0)+' completed · '+fmt((s.NOT_STARTED||0)+(s.NOT_SYNCED||0))+' pending</span>';
+      container.appendChild(row);
+    }
+
+    async function load(){
+      try{
+        var ov,subj,sch,ea;
+        [ov,subj,sch,ea]=await Promise.all([
+          j('/api/dashboard/overview'+Q), j('/api/dashboard/subjects'+Q),
+          j('/api/dashboard/schools'+Q).catch(function(){return {schools:[]};}),
+          j('/api/dashboard/exam-analytics'+Q).catch(function(){return null;})
+        ]);
+        document.getElementById('upd').textContent='updated '+new Date().toLocaleTimeString('en-GB');
+        var total=ov.totalRegistered||0, done=ov.COMPLETED||0, students=ov.studentCount!=null?ov.studentCount:total;
+        var schools=(sch&&sch.schools)?sch.schools:[];
+
+        // hero
+        document.getElementById('k-comp').textContent=(ov.completionRate!=null?ov.completionRate:pct(done,total))+'%';
+        document.getElementById('k-comp-sub').textContent=fmt(done)+' of '+fmt(total)+' sittings done';
+        document.getElementById('k-live').textContent=fmt(ov.IN_PROGRESS);
+        document.getElementById('k-done').textContent=fmt(done);
+        document.getElementById('k-done-sub').textContent='avg '+(ov.avgTimeUsedSeconds!=null?Math.round(ov.avgTimeUsedSeconds/60)+'m':'—')+' per exam';
+        document.getElementById('k-wait').textContent=fmt((ov.NOT_STARTED||0)+(ov.NOT_SYNCED||0));
+        document.getElementById('k-students').textContent=fmt(students);
+        document.getElementById('k-schools').textContent=fmt(schools.length)+' schools active';
+
+        // delivery progress segmented
+        var pb=document.getElementById('p-bar');pb.innerHTML='';
+        SEG.forEach(function(s){var v=ov[s.k]||0,w=total>0?(v/total*100):0;var d=document.createElement('span');d.style.width=w+'%';d.style.background=s.c;d.title=s.nm+': '+fmt(v);pb.appendChild(d);});
+        document.getElementById('p-txt').textContent=(ov.completionRate!=null?ov.completionRate:pct(done,total))+'% complete · '+fmt(total-done)+' remaining';
+
+        // exam types progress
+        var ex=document.getElementById('exams');ex.innerHTML='';
+        (subj.subjects||[]).slice().sort(function(a,b){return b.total-a.total;}).forEach(function(s,i){
+          var cr=s.completionRate!=null?s.completionRate:pct(s.COMPLETED,s.total);
+          var row=document.createElement('div');row.className='row';
+          row.innerHTML='<span class="nm">'+s.examSubject+'</span><span class="pc">'+cr+'%</span>'+
+            '<span class="track"><span style="width:'+cr+'%;background:'+grads[i%4]+'"></span></span>'+
+            '<span class="meta">'+fmt(s.COMPLETED||0)+'/'+fmt(s.total||0)+' · '+fmt(s.IN_PROGRESS||0)+' sitting now</span>';
+          ex.appendChild(row);
+        });
+
+        // schools: laggards (need follow-up) + leaders — only schools with enough volume
+        var elig=schools.filter(function(s){return (s.total||0)>=20;});
+        var lag=elig.slice().sort(function(a,b){return (a.completionRate||0)-(b.completionRate||0);}).slice(0,8);
+        var lead=elig.slice().sort(function(a,b){return (b.completionRate||0)-(a.completionRate||0);}).slice(0,8);
+        var lc=document.getElementById('laggards');lc.innerHTML='';lag.forEach(function(s,i){schoolRow(lc,s,i,false);});
+        if(!lag.length) lc.innerHTML='<div class="muted" style="padding:10px">No schools yet.</div>';
+        var ld=document.getElementById('leaders');ld.innerHTML='';lead.forEach(function(s,i){schoolRow(ld,s,i,true);});
+        if(!lead.length) ld.innerHTML='<div class="muted" style="padding:10px">No schools yet.</div>';
+
+        // ---- analytics row ----
+        function miniBars(elId, items, colorFn, labFn, valFn){
+          var el=document.getElementById(elId); if(!el) return; el.innerHTML='';
+          var mx=Math.max.apply(null, items.map(function(x){return x._v;}).concat([1]));
+          items.forEach(function(x){
+            var h=Math.max(2, x._v/mx*100);
+            var b=document.createElement('div'); b.className='b';
+            b.innerHTML='<div class="v">'+valFn(x)+'</div><div class="f" style="height:'+h+'%;background:'+colorFn(x)+'"></div><div class="l">'+labFn(x)+'</div>';
+            el.appendChild(b);
+          });
+        }
+        if(ea){
+          // time distribution + rapid flag
+          document.getElementById('a-rapid').textContent=fmt(ea.time.rapidCount);
+          document.getElementById('a-rapid-sub').textContent='of '+fmt(ea.time.total)+' · '+pct(ea.time.rapidCount,ea.time.total)+'% · avg '+Math.round(ea.time.avgSeconds/60)+'m/exam';
+          miniBars('a-time', ea.time.distribution.map(function(b){return {label:b.label,_v:b.count};}),
+            function(x){return x.label==='<2m'?'#e05260':'linear-gradient(180deg,#4c8dff,#9b7be8)';},
+            function(x){return x.label;}, function(x){return fmt(x._v);});
+          // activity by hour
+          miniBars('a-hour', ea.byHour.map(function(h){return {label:h.hour,_v:h.count};}),
+            function(){return 'linear-gradient(180deg,#26c281,#4c8dff)';},
+            function(x){return x.label;}, function(x){return x._v>=1000?Math.round(x._v/1000)+'k':x._v;});
+          // daily velocity
+          miniBars('a-daily', ea.daily.map(function(d){return {label:d.date,_v:d.count};}),
+            function(){return 'linear-gradient(180deg,#f0b429,#e05260)';},
+            function(x){return x.label;}, function(x){return fmt(x._v);});
+        }
+      }catch(e){}
+    }
+    load(); setInterval(load,5000);
+  </script>
+</body>
+</html>

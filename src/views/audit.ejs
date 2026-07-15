@@ -1,0 +1,24 @@
+<%- include('partials/head') %>
+<%- include('partials/nav') %>
+
+<div class="panel">
+  <h2>Audit Log <span class="muted">(latest 200)</span></h2>
+  <table>
+    <thead><tr><th>When</th><th>Actor</th><th>Action</th><th>Entity</th><th>Detail</th><th>IP</th></tr></thead>
+    <tbody>
+      <% logs.forEach(function(l){ %>
+        <tr>
+          <td class="muted"><%= new Date(l.createdAt).toLocaleString() %></td>
+          <td><%= l.actorEmail || '—' %></td>
+          <td><span class="status <%= ['LOGIN_FAILED'].includes(l.action)?'ERROR':'OK' %>"><%= l.action %></span></td>
+          <td class="mono"><%= l.entityType || '' %> <%= l.entityId ? l.entityId.slice(0,8) : '' %></td>
+          <td><%= l.detail || '' %></td>
+          <td class="mono muted"><%= l.ipAddress || '' %></td>
+        </tr>
+      <% }); %>
+      <% if (logs.length===0){ %><tr><td colspan="6" class="muted">No audit entries yet.</td></tr><% } %>
+    </tbody>
+  </table>
+</div>
+
+<%- include('partials/foot') %>

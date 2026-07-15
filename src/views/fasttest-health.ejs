@@ -1,0 +1,317 @@
+<%- include('partials/head') %>
+<%- include('partials/nav') %>
+
+<style>
+  .verdict{padding:18px 22px;border-radius:14px;display:flex;align-items:center;gap:18px;margin-bottom:16px;border:1px solid var(--line,#2e2e2b)}
+  .verdict .dot{width:18px;height:18px;border-radius:50%;flex:0 0 auto}
+  .verdict .big{font-size:26px;font-weight:800;line-height:1.1}
+  .verdict .reason{font-size:13px;color:var(--muted,#8a897f);margin-top:3px}
+  .v-HEALTHY{background:#0ca30c14;border-color:#0ca30c55} .v-HEALTHY .dot{background:#0ca30c;box-shadow:0 0 14px #0ca30c}
+  .v-DEGRADED{background:#fab21914;border-color:#fab21955} .v-DEGRADED .dot{background:#fab219;box-shadow:0 0 14px #fab219}
+  .v-DOWN{background:#d03b3b1c;border-color:#d03b3b66} .v-DOWN .dot{background:#d03b3b;box-shadow:0 0 14px #d03b3b}
+  .sect-title{font-size:11px;font-weight:800;text-transform:uppercase;letter-spacing:.09em;color:var(--muted,#8a897f);opacity:.75;margin:20px 2px 8px}
+  .kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px}
+  .card{background:var(--panel,#1b1b19);border:1px solid var(--line,#2e2e2b);border-radius:12px;padding:14px 16px}
+  .card .l{font-size:12px;color:var(--muted,#8a897f);font-weight:600;display:flex;align-items:center;gap:5px}
+  .card .v{font-size:30px;font-weight:800;font-variant-numeric:tabular-nums;margin-top:4px;line-height:1}
+  .card .sub{font-size:11px;color:var(--muted,#8a897f);margin-top:3px}
+  .card.good .v{color:#0ca30c} .card.warn .v{color:#fab219} .card.bad .v{color:#d03b3b}
+  .gauge{height:10px;background:#0000002e;border-radius:8px;overflow:hidden;margin-top:8px}
+  .gauge>span{display:block;height:100%;border-radius:8px;transition:width .5s ease}
+  table.mini{width:100%;border-collapse:collapse} table.mini td,table.mini th{padding:8px 10px;text-align:left;border-bottom:1px solid var(--line,#2e2e2b22)}
+  table.mini th{font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted,#8a897f)}
+  .muted-sm{font-size:12px;color:var(--muted,#8a897f)}
+  .pill{display:inline-block;padding:2px 9px;border-radius:20px;font-size:12px;font-weight:700}
+  .chart-wrap{position:relative} .chart-wrap svg{width:100%;height:150px;display:block}
+  .tip{position:absolute;pointer-events:none;background:#000c;color:#fff;font-size:11px;padding:4px 8px;border-radius:6px;opacity:0;white-space:nowrap;transform:translate(-50%,-130%)}
+  .explain-icon{width:24px;height:24px;border-radius:50%;border:1.5px solid currentColor;background:transparent;color:inherit;font-weight:900;font-size:14px;line-height:1;cursor:pointer;flex:0 0 auto;display:inline-flex;align-items:center;justify-content:center;opacity:.85}
+  .explain-icon:hover{opacity:1;background:#ffffff1a}
+  .modal-ov{position:fixed;inset:0;background:#0009;display:none;align-items:center;justify-content:center;z-index:1000;padding:20px}
+  .modal-ov.open{display:flex}
+  .modal-box{background:var(--panel,#1b1b19);border:1px solid var(--line,#2e2e2b);border-radius:16px;max-width:560px;width:100%;max-height:85vh;overflow:auto;box-shadow:0 20px 60px #000a}
+  .modal-box header{display:flex;align-items:center;gap:12px;padding:18px 22px;border-bottom:1px solid var(--line,#2e2e2b22)}
+  .modal-box header .big{font-size:20px;font-weight:800}
+  .modal-box .x{margin-left:auto;background:transparent;border:none;color:var(--muted,#8a897f);font-size:22px;cursor:pointer;line-height:1}
+  .modal-box .body{padding:18px 22px;font-size:14px;line-height:1.7;white-space:pre-wrap}
+</style>
+
+<div id="verdict" class="verdict v-HEALTHY">
+  <span class="dot"></span>
+  <div style="flex:1">
+    <div style="display:flex;align-items:center;gap:9px">
+      <div class="big" id="v-text">Loading…</div>
+      <button type="button" id="explain-btn" class="explain-icon" title="اشرح الوضع الحالي">!</button>
+    </div>
+    <div class="reason" id="v-reason">—</div>
+  </div>
+  <div style="text-align:right" class="muted-sm">
+    <div id="v-ws" style="font-weight:600;color:var(--text,#eee)">—</div>
+    <div id="v-wsurl">—</div>
+    <div style="margin-top:4px"><span class="ft-dot" style="display:inline-block;width:7px;height:7px;border-radius:50%;background:#0ca30c;animation:ftpulse 1.8s infinite;color:#0ca30c"></span> LIVE · <span id="v-updated">—</span></div>
+  </div>
+</div>
+
+<div class="modal-ov" id="explain-modal">
+  <div class="modal-box">
+    <header>
+      <span class="dot" id="ex-dot" style="width:14px;height:14px;border-radius:50%;background:#0ca30c"></span>
+      <span class="big" id="ex-title">حالة الفاست تيست</span>
+      <button type="button" class="x" id="explain-close">✕</button>
+    </header>
+    <div class="body" id="ex-body">—</div>
+  </div>
+</div>
+
+<div class="sect-title">Reliability · last hour</div>
+<div class="kpi-grid">
+  <div class="card" id="c-success"><div class="l">✅ Success rate</div><div class="v" id="k-success">—</div><div class="sub" id="k-success-sub">last 60 min</div></div>
+  <div class="card" id="c-fail"><div class="l">❌ Failed calls</div><div class="v" id="k-fail">—</div><div class="sub">of <span id="k-wintotal">—</span> calls (1h)</div></div>
+  <div class="card" id="c-slow"><div class="l">⏳ Hung / timed out</div><div class="v" id="k-slow">—</div><div class="sub">&gt; 30s, last 60 min</div></div>
+  <div class="card"><div class="l">📶 Calls / min</div><div class="v" id="k-cpm">—</div><div class="sub">right now</div></div>
+  <div class="card"><div class="l">🔌 Connection</div><div class="v" style="font-size:20px;padding-top:6px" id="k-conn">—</div><div class="sub" id="k-circuit">—</div></div>
+</div>
+
+<div class="sect-title">Latency · successful calls, last hour</div>
+<div class="kpi-grid">
+  <div class="card good"><div class="l">⚡ Median (p50)</div><div class="v" id="l-p50">—</div><div class="sub">typical response</div></div>
+  <div class="card"><div class="l">p95</div><div class="v" id="l-p95">—</div><div class="sub">slow tail</div></div>
+  <div class="card"><div class="l">p99</div><div class="v" id="l-p99">—</div><div class="sub">worst 1%</div></div>
+  <div class="card"><div class="l">Max</div><div class="v" id="l-max">—</div><div class="sub">slowest (clean)</div></div>
+  <div class="card"><div class="l">Mean</div><div class="v" id="l-avg">—</div><div class="sub"><span id="l-n">—</span> samples</div></div>
+</div>
+
+<div class="grid2" style="margin-top:16px">
+  <div class="panel">
+    <h2>📈 Response time (median) — last 30 min</h2>
+    <div class="chart-wrap"><svg id="chart-latency" viewBox="0 0 600 150" preserveAspectRatio="none"></svg><div class="tip" id="tip-latency"></div></div>
+    <div class="muted-sm" id="chart-latency-lbl">—</div>
+  </div>
+  <div class="panel">
+    <h2>📊 Throughput (calls/min) — last 30 min</h2>
+    <div class="chart-wrap"><svg id="chart-tput" viewBox="0 0 600 150" preserveAspectRatio="none"></svg><div class="tip" id="tip-tput"></div></div>
+    <div class="muted-sm" id="chart-tput-lbl">—</div>
+  </div>
+</div>
+
+<div class="grid2">
+  <div class="panel">
+    <h2>⚙️ Efficiency</h2>
+    <div style="margin-top:6px">
+      <div class="muted-sm">Rate utilization <span id="e-ratetxt"></span></div>
+      <div class="gauge"><span id="e-rate" style="width:0%;background:#3987e5"></span></div>
+    </div>
+    <div style="margin-top:16px;display:grid;grid-template-columns:1fr 1fr;gap:14px">
+      <div><div class="muted-sm">Token reuse (data calls ÷ auth)</div><div class="v" style="font-size:24px;font-weight:800" id="e-token">—</div></div>
+      <div><div class="muted-sm">Sync throughput</div><div class="v" style="font-size:24px;font-weight:800" id="e-sync">—</div></div>
+    </div>
+    <table class="mini" style="margin-top:14px">
+      <tr><td>Last successful sync</td><td style="text-align:right" id="h-lastsync">—</td></tr>
+      <tr><td>Last authentication</td><td style="text-align:right" id="h-lastauth">—</td></tr>
+      <tr><td>Sync engine</td><td style="text-align:right" id="h-syncen">—</td></tr>
+    </table>
+  </div>
+  <div class="panel">
+    <h2>🧩 Errors — last hour <span class="muted-sm" id="err-count"></span></h2>
+    <div id="h-errors" style="margin:6px 0 12px">—</div>
+    <div style="max-height:230px;overflow:auto">
+      <table class="mini">
+        <thead><tr><th>Time</th><th>Endpoint</th><th style="text-align:center">HTTP</th><th>Detail</th></tr></thead>
+        <tbody id="err-body"></tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="panel">
+  <h2>🕓 Data freshness — how recently each registration was synced</h2>
+  <div id="fresh-bar" style="height:34px;border-radius:8px;display:flex;overflow:hidden;background:#0000002e;gap:2px"></div>
+  <div id="fresh-legend" style="display:grid;grid-template-columns:repeat(5,1fr);gap:10px;margin-top:14px"></div>
+</div>
+
+<div class="panel">
+  <h2>🔗 Requests by endpoint <span class="muted-sm">· last hour</span></h2>
+  <table class="mini">
+    <thead><tr><th>Endpoint</th><th style="text-align:right">Calls</th><th style="text-align:right">Avg</th><th style="width:38%">Share</th></tr></thead>
+    <tbody id="ep-body"></tbody>
+  </table>
+</div>
+
+<script>
+  var fmt=function(n){return (n==null||isNaN(n))?'—':Number(n).toLocaleString('en-US');};
+  var ms=function(n){return (n==null||isNaN(n))?'—':fmt(Math.round(n))+' ms';};
+  var ago=function(iso){if(!iso)return '—';var s=Math.max(0,(Date.now()-new Date(iso).getTime())/1000);
+    if(s<60)return Math.round(s)+'s ago';if(s<3600)return Math.round(s/60)+'m ago';if(s<86400)return Math.round(s/3600)+'h ago';return Math.round(s/86400)+'d ago';};
+  function cls(el,c){el.className='card '+(c||'');}
+  var SVGNS='http://www.w3.org/2000/svg';
+
+  // Line chart with hover crosshair + tooltip.
+  function lineChart(svgId,lblId,tipId,series,valueKey,color,unit){
+    var svg=document.getElementById(svgId); if(!svg) return; svg.innerHTML='';
+    var W=600,H=150,pad=8; var pts=series.map(function(s){return s[valueKey]||0;});
+    if(pts.length<2){ document.getElementById(lblId).textContent='collecting data…'; return; }
+    var max=Math.max.apply(null,pts)||1, min=0;
+    var x=function(i){return pad+(i/(pts.length-1))*(W-2*pad);};
+    var y=function(v){return H-pad-((v-min)/(max-min||1))*(H-2*pad);};
+    var dArea='M'+x(0)+','+(H-pad); pts.forEach(function(v,i){dArea+=' L'+x(i).toFixed(1)+','+y(v).toFixed(1);}); dArea+=' L'+x(pts.length-1)+','+(H-pad)+' Z';
+    var area=document.createElementNS(SVGNS,'path'); area.setAttribute('d',dArea); area.setAttribute('fill',color); area.setAttribute('opacity','0.14'); svg.appendChild(area);
+    var dLine=''; pts.forEach(function(v,i){dLine+=(i?' L':'M')+x(i).toFixed(1)+','+y(v).toFixed(1);});
+    var line=document.createElementNS(SVGNS,'path'); line.setAttribute('d',dLine); line.setAttribute('fill','none'); line.setAttribute('stroke',color); line.setAttribute('stroke-width','2'); line.setAttribute('vector-effect','non-scaling-stroke'); svg.appendChild(line);
+    document.getElementById(lblId).textContent='now '+pts[pts.length-1]+unit+' · peak '+max+unit+' · '+series.length+' min';
+    // hover
+    var tip=document.getElementById(tipId);
+    svg.onmousemove=function(ev){
+      var rect=svg.getBoundingClientRect(); var rx=(ev.clientX-rect.left)/rect.width; var i=Math.round(rx*(pts.length-1));
+      i=Math.max(0,Math.min(pts.length-1,i));
+      tip.style.opacity='1'; tip.style.left=(x(i)/W*100)+'%'; tip.style.top=(y(pts[i])/H*100)+'%';
+      tip.textContent=(series[i].t||'')+' · '+pts[i]+unit;
+    };
+    svg.onmouseleave=function(){tip.style.opacity='0';};
+  }
+
+  var FRESH=[
+    {k:'last5m',nm:'< 5 min',color:'#0ca30c'},{k:'last1h',nm:'< 1 hour',color:'#199e70'},
+    {k:'last24h',nm:'< 24 h',color:'#3987e5'},{k:'older',nm:'older',color:'#eda100'},
+    {k:'never',nm:'never synced',color:'#6b6a63'}
+  ];
+
+  var lastData=null;
+  function render(d){
+    try{
+      lastData=d;
+      if(document.getElementById('explain-modal').classList.contains('open')) buildExplain(d);
+      var vb=document.getElementById('verdict'); vb.className='verdict v-'+d.verdict;
+      document.getElementById('v-text').textContent='FastTest: '+d.verdict;
+      document.getElementById('v-reason').textContent=d.verdictReason||'';
+      document.getElementById('v-ws').textContent=d.workspace?d.workspace.name:'—';
+      document.getElementById('v-wsurl').textContent=d.workspace?d.workspace.baseUrl:'—';
+      document.getElementById('v-updated').textContent=new Date().toLocaleTimeString('en-GB');
+
+      var c=d.calls;
+      document.getElementById('k-success').textContent=c.windowSuccessRate+'%';
+      document.getElementById('k-success-sub').textContent=c.windowTotal>0?('last 60 min · '+fmt(c.windowTotal)+' calls'):'no calls in last hour';
+      cls(document.getElementById('c-success'), c.windowSuccessRate>=99.5?'good':c.windowSuccessRate>=98?'warn':'bad');
+      document.getElementById('k-fail').textContent=fmt(c.windowFailures);
+      cls(document.getElementById('c-fail'), c.windowFailures===0?'good':c.windowFailures<=5?'warn':'bad');
+      document.getElementById('k-wintotal').textContent=fmt(c.windowTotal);
+      document.getElementById('k-slow').textContent=fmt(c.slowCount);
+      cls(document.getElementById('c-slow'), c.slowCount===0?'good':'bad');
+      document.getElementById('k-cpm').textContent=fmt(c.callsLastMin);
+      var conn=document.getElementById('k-conn');
+      var okc=d.workspace&&d.workspace.authOk; conn.textContent=okc?'✅ Connected':'❌ Failed'; conn.style.color=okc?'#0ca30c':'#d03b3b';
+      document.getElementById('k-circuit').textContent='Circuit: '+(d.workspace?d.workspace.circuit:'—');
+
+      var L=d.latency;
+      document.getElementById('l-p50').textContent=ms(L.p50);
+      document.getElementById('l-p95').textContent=ms(L.p95);
+      document.getElementById('l-p99').textContent=ms(L.p99);
+      document.getElementById('l-max').textContent=ms(L.max);
+      document.getElementById('l-avg').textContent=ms(L.avg);
+      document.getElementById('l-n').textContent=fmt(L.sampleCount);
+
+      var rate=d.throughput; var g=document.getElementById('e-rate');
+      g.style.width=rate.rateUtil+'%'; g.style.background=rate.rateUtil>90?'#d03b3b':rate.rateUtil>70?'#fab219':'#3987e5';
+      document.getElementById('e-ratetxt').textContent=rate.currentRps+' / '+rate.maxRps+' req/s ('+rate.rateUtil+'%)';
+      document.getElementById('e-token').textContent='1 : '+d.tokens.reuseRatio;
+      document.getElementById('e-sync').textContent=d.sync?(fmt(d.sync.jobsLastMin)+' /min'):'—';
+      document.getElementById('h-lastsync').textContent=ago(d.workspace&&d.workspace.lastSyncAt);
+      document.getElementById('h-lastauth').textContent=ago(d.workspace&&d.workspace.lastAuthAt);
+      document.getElementById('h-syncen').textContent=d.workspace?(d.workspace.syncPaused?'⏸ paused':(d.workspace.syncEnabled?'▶ enabled':'⏹ disabled')):'—';
+
+      var eh=document.getElementById('h-errors');
+      eh.innerHTML=(d.errorsByStatus&&d.errorsByStatus.length)
+        ? d.errorsByStatus.map(function(e){return '<span class="pill" style="background:#d03b3b22;color:#d03b3b;margin:2px">HTTP '+(e.status||'timeout')+' · '+fmt(e.count)+'</span>';}).join(' ')
+        : '<span class="pill" style="background:#0ca30c22;color:#0ca30c">No errors in the last hour ✓</span>';
+
+      var eb=document.getElementById('ep-body'); eb.innerHTML='';
+      var maxN=Math.max.apply(null,(d.byEndpoint||[]).map(function(e){return e.count;}).concat([1]));
+      (d.byEndpoint||[]).forEach(function(e){
+        var tr=document.createElement('tr');
+        tr.innerHTML='<td>'+e.endpoint+'</td><td style="text-align:right">'+fmt(e.count)+'</td><td style="text-align:right">'+ms(e.avgMs)+'</td>'+
+          '<td><div class="gauge"><span style="width:'+(e.count/maxN*100)+'%;background:#199e70"></span></div></td>';
+        eb.appendChild(tr);
+      });
+
+      lineChart('chart-latency','chart-latency-lbl','tip-latency', d.timeSeries||[], 'avgMs', '#3987e5', 'ms');
+      lineChart('chart-tput','chart-tput-lbl','tip-tput', d.timeSeries||[], 'count', '#199e70', '');
+
+      var fr=d.freshness||{}; var ft=fr.total||0;
+      var fb=document.getElementById('fresh-bar'), fl=document.getElementById('fresh-legend'); fb.innerHTML=''; fl.innerHTML='';
+      FRESH.forEach(function(s){
+        var v=fr[s.k]||0, w=ft>0?(v/ft*100):0;
+        var seg=document.createElement('div'); seg.style.width=w+'%'; seg.style.background=s.color; seg.style.minWidth=v>0?'2px':'0'; seg.title=s.nm+': '+fmt(v); fb.appendChild(seg);
+        var row=document.createElement('div'); row.style.cssText='display:flex;align-items:center;gap:8px';
+        row.innerHTML='<span style="width:12px;height:12px;border-radius:3px;background:'+s.color+';flex:0 0 auto"></span><span style="flex:1;font-size:13px">'+s.nm+'</span><b>'+fmt(v)+'</b>';
+        fl.appendChild(row);
+      });
+
+      var xb=document.getElementById('err-body'); xb.innerHTML='';
+      document.getElementById('err-count').textContent='('+((d.recentErrors&&d.recentErrors.length)||0)+')';
+      (d.recentErrors||[]).forEach(function(x){
+        var code=x.httpStatus||'timeout';
+        var tr=document.createElement('tr');
+        tr.innerHTML='<td class="muted-sm" style="white-space:nowrap">'+ago(x.at)+'</td>'+
+          '<td class="muted-sm">'+(x.endpoint||'')+'</td>'+
+          '<td style="text-align:center"><span class="pill" style="background:#d03b3b22;color:#d03b3b">'+code+'</span></td>'+
+          '<td class="muted-sm">'+((x.message||'').substring(0,80)||'—')+'</td>';
+        xb.appendChild(tr);
+      });
+    }catch(e){}
+  }
+
+  // Build a plain-Arabic explanation of the CURRENT status into the popup.
+  var VMETA={HEALTHY:{c:'#0ca30c',t:'🟢 النظام سليم (HEALTHY)'},DEGRADED:{c:'#fab219',t:'🟡 أداء متدهور جزئياً (DEGRADED)'},DOWN:{c:'#d03b3b',t:'🔴 النظام متوقف (DOWN)'}};
+  function buildExplain(d){
+    var body=document.getElementById('ex-body'), title=document.getElementById('ex-title'), dot=document.getElementById('ex-dot');
+    if(!d){ body.textContent='جاري تحميل الحالة…'; return; }
+    var c=d.calls||{}, L=d.latency||{}, w=d.workspace||{};
+    var m=VMETA[d.verdict]||{c:'#8a897f',t:d.verdict};
+    title.textContent=m.t; dot.style.background=m.c;
+    var lines=[];
+    lines.push('السبب: '+(d.verdictReason||'—'));
+    lines.push('');
+    lines.push('📊 المقاييس الحالية (آخر ساعة):');
+    lines.push('• نسبة نجاح الركوستات: '+c.windowSuccessRate+'%  ('+fmt(c.windowFailures)+' فشل من '+fmt(c.windowTotal)+' ركوست)');
+    lines.push('• ركوستات معلّقة / تايم-أوت (أكتر من 30 ثانية): '+fmt(c.slowCount));
+    lines.push('• زمن الاستجابة النموذجي p50: '+ms(L.p50)+'   ·   p95: '+ms(L.p95));
+    lines.push('• الاتصال: '+(w.authOk?'متصل ✅':'فاشل ❌')+'   ·   Circuit Breaker: '+(w.circuit||'—'));
+    lines.push('');
+    if(d.verdict==='HEALTHY'){
+      lines.push('✅ يعني إيه؟');
+      lines.push('الفاست تيست بيرد بسرعة ونسبة الأخطاء منخفضة. كل حاجة تمام ومفيش أي إجراء مطلوب منك.');
+      if(c.slowCount>0) lines.push('\nملاحظة: فيه '+fmt(c.slowCount)+' ركوست علّقت لثوانٍ — ده عدد طبيعي مع أي API خارجي ومش بيأثر على الحالة.');
+    } else if(d.verdict==='DEGRADED'){
+      lines.push('⚠️ يعني إيه؟');
+      lines.push('النظام لسه شغّال، لكن فيه إشارة تستاهل نظرة (نسبة أخطاء أعلى، أو بطء، أو الدائرة بتتعافى). راقب الوضع — لو السبب شبكة عابرة غالباً بيتحسّن لوحده. لو استمر، اتأكد من اتصال الفاست تيست.');
+    } else {
+      lines.push('🔴 يعني إيه؟');
+      lines.push('الفاست تيست مش شغّال فعلاً دلوقتي (الاتصال مقطوع أو الدائرة مفتوحة). المزامنة هتقف مؤقتاً وهترجع تلقائياً أول ما يتعافى. لو طال، راجع صلاحية الشهادة/الشبكة وحالة سيرفر الفاست تيست.');
+    }
+    body.textContent=lines.join('\n');
+  }
+  (function(){
+    var modal=document.getElementById('explain-modal');
+    var open=function(){ buildExplain(lastData); modal.classList.add('open'); };
+    var close=function(){ modal.classList.remove('open'); };
+    document.getElementById('explain-btn').addEventListener('click', open);
+    document.getElementById('explain-close').addEventListener('click', close);
+    modal.addEventListener('click', function(e){ if(e.target===modal) close(); });
+    document.addEventListener('keydown', function(e){ if(e.key==='Escape') close(); });
+  })();
+
+  // Real-time stream (Server-Sent Events); falls back to polling if unavailable.
+  var liveEl=document.getElementById('v-updated');
+  function connectStream(){
+    if(!window.EventSource){ pollFallback(); return; }
+    var es;
+    try{ es=new EventSource('/api/fasttest/health/stream'); }catch(e){ pollFallback(); return; }
+    es.onmessage=function(e){ try{ render(JSON.parse(e.data)); }catch(_){} };
+    es.onerror=function(){ if(es){es.close();} setTimeout(connectStream,5000); };
+  }
+  function pollFallback(){
+    async function load(){ try{ var r=await fetch('/api/fasttest/health',{headers:{Accept:'application/json'}}); if(r.ok) render(await r.json()); }catch(e){} }
+    load(); setInterval(load,5000);
+  }
+  connectStream();
+</script>
+
+<%- include('partials/foot') %>

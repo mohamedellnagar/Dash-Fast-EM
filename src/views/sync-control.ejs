@@ -1,0 +1,86 @@
+<%- include('partials/head') %>
+<%- include('partials/nav') %>
+
+<%- include('partials/filters', { query: query, subjects: subjects, action: '/sync' }) %>
+
+<div class="panel">
+  <div class="toolbar">
+    <% if (canBulk) { %>
+      <button class="btn sm" id="bulkSync">Sync selected</button>
+      <button class="btn secondary sm" id="bulkCancel">Cancel pending</button>
+      <button class="btn secondary sm" id="bulkReview">Mark manual review</button>
+      <span class="muted">Max <%= maxSelection %> per action.</span>
+      <span style="margin-left:auto"></span>
+      <label>Batch:
+        <select id="wsSel"><option value="">workspace…</option><% workspaces.forEach(function(w){ %><option value="<%= w.id %>"><%= w.workspaceName %></option><% }); %></select>
+      </label>
+      <button class="btn secondary sm" id="wsBatch">Sync workspace</button>
+    <% } %>
+  </div>
+
+  <div style="overflow-x:auto">
+  <table>
+    <thead><tr>
+      <% if (canBulk) { %><th><input type="checkbox" id="selAll"></th><% } %>
+      <th>Student</th><th>School</th><th>Subject</th><th>TestCode</th><th>Status</th><th>Sync State</th><th>Queue</th><th>Next Sync</th><th>Last Sync</th><th>Retry</th><th>Stale</th><th>Last Error</th><th></th>
+    </tr></thead>
+    <tbody>
+      <% data.rows.forEach(function(r){ var job = jobByReg.get(r.id); %>
+        <tr>
+          <% if (canBulk) { %><td><input type="checkbox" class="sel" value="<%= r.id %>"></td><% } %>
+          <td class="mono"><%= r.studentExternalId %><br><span class="muted"><%= r.student && r.student.nameEnglish || '' %></span></td>
+          <td><%= r.school && r.school.name || '—' %></td>
+          <td><%= r.examSubject %></td>
+          <td class="mono"><%= r.testCodeOriginal %></td>
+          <td><span class="status <%= r.dashboardStatus %>"><%= r.dashboardStatus.replace(/_/g,' ') %></span></td>
+          <td class="mono"><%= r.syncState %></td>
+          <td><% if(job){ %><span class="status PENDING"><%= job.status %></span><% } else { %><span class="muted">—</span><% } %></td>
+          <td class="muted"><%= r.nextSyncAt ? new Date(r.nextSyncAt).toLocaleTimeString() : '—' %></td>
+          <td class="muted"><%= r.lastSyncAt ? new Date(r.lastSyncAt).toLocaleTimeString() : '—' %></td>
+          <td><%= r.syncRetryCount %></td>
+          <td><% if(r.isStale){ %><span class="sev-<%= r.staleSeverity || 'LOW' %>" title="<%= r.staleReason || '' %>">⚠ <%= r.staleSeverity %></span><% } else { %><span class="muted">—</span><% } %></td>
+          <td class="mono muted" style="max-width:160px;overflow:hidden;text-overflow:ellipsis"><%= r.syncError || '' %></td>
+          <td><a class="btn secondary sm" href="/registrations/<%= r.id %>">View</a></td>
+        </tr>
+      <% }); %>
+      <% if(data.rows.length===0){ %><tr><td colspan="14" class="empty">No registrations match the filters.</td></tr><% } %>
+    </tbody>
+  </table>
+  </div>
+  <div class="pager"><span>Page <%= data.page %> of <%= data.totalPages %> · <%= data.total %> records</span>
+    <% var qp = new URLSearchParams(query); %>
+    <% if(data.page>1){ qp.set('page', data.page-1); %><a class="btn secondary sm" href="/sync?<%= qp.toString() %>">← Prev</a><% } %>
+    <% if(data.page<data.totalPages){ qp.set('page', data.page+1); %><a class="btn secondary sm" href="/sync?<%= qp.toString() %>">Next →</a><% } %>
+  </div>
+</div>
+
+<% if (canBulk) { %>
+<script>
+(function(){
+  var selAll = document.getElementById('selAll');
+  if (selAll) selAll.onchange = function(){ document.querySelectorAll('.sel').forEach(function(c){ c.checked = selAll.checked; }); };
+  function selected(){ return Array.from(document.querySelectorAll('.sel:checked')).map(function(c){ return c.value; }); }
+  async function bulk(action){
+    var ids = selected();
+    if (ids.length === 0) { alert('Select at least one registration'); return; }
+    if (ids.length > <%= maxSelection %>) { alert('Selection exceeds max of <%= maxSelection %>'); return; }
+    if (!confirm(action + ' ' + ids.length + ' registration(s)?')) return;
+    var r = await fetch('/api/sync/bulk', {method:'POST', headers:{'Content-Type':'application/json','Accept':'application/json'}, body: JSON.stringify({action: action, registrationIds: ids})});
+    var j = await r.json();
+    alert(r.ok ? (action + ': ' + j.affected + ' affected') : ('Error: ' + (j.error||'')));
+    location.reload();
+  }
+  document.getElementById('bulkSync').onclick = function(){ bulk('SYNC'); };
+  document.getElementById('bulkCancel').onclick = function(){ bulk('CANCEL'); };
+  document.getElementById('bulkReview').onclick = function(){ bulk('MANUAL_REVIEW'); };
+  document.getElementById('wsBatch').onclick = async function(){
+    var id = document.getElementById('wsSel').value; if(!id){ alert('Pick a workspace'); return; }
+    if(!confirm('Enqueue a workspace batch sync?')) return;
+    await fetch('/api/sync/workspace/'+id, {method:'POST', headers:{'Accept':'application/json'}});
+    alert('Workspace batch enqueued'); location.reload();
+  };
+})();
+</script>
+<% } %>
+
+<%- include('partials/foot') %>

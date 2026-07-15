@@ -1,0 +1,172 @@
+<!DOCTYPE html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>ABA Schools — Exam Delivery</title>
+  <style>
+    :root{
+      --bg:#0a0c11; --card:#12151e; --card2:#161a25; --line:#232a3a; --ink:#f2f5fc; --muted:#9ea5ba; --dim:#666d84;
+      --done:#26c281; --live:#f0b429; --wait:#4c8dff; --none:#5a6076; --bad:#e05260; --violet:#9b7be8;
+    }
+    *{box-sizing:border-box;margin:0;padding:0}
+    html,body{height:100%}
+    body{background:radial-gradient(1100px 640px at 12% -12%,#182036 0,transparent 55%),var(--bg);
+      color:var(--ink);font-family:"Segoe UI",-apple-system,BlinkMacSystemFont,Roboto,Helvetica,Arial,sans-serif;
+      overflow:hidden;display:flex;flex-direction:column;height:100vh;padding:18px 20px;gap:14px;-webkit-font-smoothing:antialiased}
+    .muted{color:var(--muted)}.dim{color:var(--dim)}
+    header{display:flex;align-items:center;gap:15px;flex:0 0 auto}
+    .logo{width:42px;height:42px;border-radius:12px;background:linear-gradient(135deg,#26c281,#4c8dff);display:flex;align-items:center;justify-content:center;font-size:22px;box-shadow:0 8px 22px -8px #26c281aa}
+    .htitle{font-size:22px;font-weight:800}
+    .htitle small{display:block;font-size:11.5px;font-weight:500;color:var(--muted);letter-spacing:1.6px;text-transform:uppercase;margin-top:2px}
+    header .spacer{flex:1}
+    .pill{display:inline-flex;align-items:center;gap:8px;padding:6px 13px;border-radius:999px;font-size:13px;font-weight:700;border:1px solid var(--line);background:var(--card)}
+    .pill.badge{background:linear-gradient(135deg,#26c281,#4c8dff);border:none;color:#fff}
+    .live-d{width:9px;height:9px;border-radius:50%;background:var(--done);box-shadow:0 0 12px var(--done);animation:pulse 1.7s infinite}
+    @keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
+    #clock{font-variant-numeric:tabular-nums;font-size:22px;font-weight:700}
+    /* kpis */
+    .kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;flex:0 0 auto}
+    .kpi{background:linear-gradient(180deg,var(--card2),var(--card));border:1px solid var(--line);border-radius:14px;padding:14px 16px}
+    .kpi .l{font-size:12px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.4px}
+    .kpi .v{font-size:clamp(24px,2.8vw,38px);font-weight:800;margin-top:6px;font-variant-numeric:tabular-nums;line-height:1}
+    .kpi .s{font-size:11.5px;color:var(--dim);margin-top:4px}
+    .kpi.done .v{color:var(--done)} .kpi.bad .v{color:var(--bad)} .kpi.live .v{color:var(--live)}
+    /* tiers strip */
+    .tiers{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;flex:0 0 auto}
+    .tier{background:linear-gradient(180deg,var(--card2),var(--card));border:1px solid var(--line);border-left-width:4px;border-radius:12px;padding:11px 15px;display:flex;align-items:center;justify-content:space-between}
+    .tier .n{font-size:26px;font-weight:800;font-variant-numeric:tabular-nums}
+    .tier .t{font-size:12px;color:var(--muted);font-weight:600}
+    .tier.t1{border-left-color:var(--done)} .tier.t2{border-left-color:var(--wait)} .tier.t3{border-left-color:var(--live)} .tier.t4{border-left-color:var(--bad)}
+    /* table */
+    .panel{flex:1 1 auto;background:linear-gradient(180deg,var(--card2),var(--card));border:1px solid var(--line);border-radius:16px;padding:8px 6px 6px;display:flex;flex-direction:column;min-height:0}
+    .panel h3{font-size:12.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;padding:8px 14px 10px;display:flex;align-items:center;gap:8px}
+    .panel h3 .cnt{margin-left:auto;font-weight:500}
+    .twrap{flex:1;overflow:auto;padding:0 8px}
+    table{width:100%;border-collapse:collapse;font-size:13.5px}
+    thead th{position:sticky;top:0;background:#141824;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.5px;text-align:left;padding:9px 10px;font-weight:700;z-index:1}
+    thead th.num{text-align:right}
+    tbody td{padding:8px 10px;border-bottom:1px solid var(--line)}
+    tbody tr:hover{background:#ffffff06}
+    td.num{text-align:right;font-variant-numeric:tabular-nums}
+    td.nm{max-width:340px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .rk{color:var(--dim);font-weight:700;display:inline-block;width:28px}
+    .cbar{display:flex;align-items:center;gap:9px;min-width:150px}
+    .cbar .track{flex:1;height:9px;background:#0a0c12;border-radius:5px;overflow:hidden}
+    .cbar .track>span{display:block;height:100%;border-radius:5px}
+    .cbar .p{font-weight:800;width:44px;text-align:right;font-variant-numeric:tabular-nums}
+    .dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px}
+    .warnrow td{background:#e0526010}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="logo">🏫</div>
+    <div class="htitle">ABA Schools<small>Exam delivery &amp; participation</small></div>
+    <span class="pill badge">ABA</span>
+    <div class="spacer"></div>
+    <span class="pill"><span class="live-d"></span><span id="upd">live</span></span>
+    <div id="clock">--:--:--</div>
+  </header>
+
+  <section class="kpis">
+    <div class="kpi"><div class="l">Schools</div><div class="v" id="k-schools">—</div><div class="s">participating</div></div>
+    <div class="kpi"><div class="l">Students</div><div class="v" id="k-students">—</div><div class="s" id="k-regs">—</div></div>
+    <div class="kpi done"><div class="l">Overall Completion</div><div class="v" id="k-comp">—</div><div class="s" id="k-comp-s">—</div></div>
+    <div class="kpi done"><div class="l">Fully Delivered</div><div class="v" id="k-full">—</div><div class="s">schools ≥ 95%</div></div>
+    <div class="kpi live"><div class="l">Sitting Now</div><div class="v" id="k-live">—</div><div class="s">across schools</div></div>
+    <div class="kpi bad"><div class="l">Need Follow-up</div><div class="v" id="k-behind">—</div><div class="s">schools &lt; 50%</div></div>
+  </section>
+
+  <section class="tiers">
+    <div class="tier t1"><div><div class="t">Fully Delivered</div><div class="dim" style="font-size:11px">≥ 95% complete</div></div><div class="n" id="t1">—</div></div>
+    <div class="tier t2"><div><div class="t">On Track</div><div class="dim" style="font-size:11px">70–95%</div></div><div class="n" id="t2">—</div></div>
+    <div class="tier t3"><div><div class="t">In Progress</div><div class="dim" style="font-size:11px">50–70%</div></div><div class="n" id="t3">—</div></div>
+    <div class="tier t4"><div><div class="t">Behind / Follow-up</div><div class="dim" style="font-size:11px">&lt; 50%</div></div><div class="n" id="t4">—</div></div>
+  </section>
+
+  <div class="panel">
+    <h3>🏫 All Schools — Delivery Progress <span class="cnt dim" id="tblcnt"></span></h3>
+    <div class="twrap">
+      <table>
+        <thead><tr>
+          <th>#  School</th>
+          <th class="num">Students</th>
+          <th class="num">Completed</th>
+          <th class="num">Sitting</th>
+          <th class="num">Not Started</th>
+          <th class="num">Pending</th>
+          <th style="width:230px">Delivery</th>
+        </tr></thead>
+        <tbody id="rows"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <script>
+    var Q='?programType=ABA';
+    var fmt=function(n){return (n==null||isNaN(n))?'—':Number(n).toLocaleString('en-US');};
+    var pct=function(n,d){return d>0?Math.round(n/d*1000)/10:0;};
+    function tick(){document.getElementById('clock').textContent=new Date().toLocaleTimeString('en-GB');}
+    setInterval(tick,1000);tick();
+    async function j(u){var r=await fetch(u,{headers:{Accept:'application/json'}});if(!r.ok)throw 0;return r.json();}
+    function barColor(cr){return cr>=95?'#26c281':cr>=70?'#4c8dff':cr>=50?'#f0b429':'#e05260';}
+
+    async function load(){
+      try{
+        var sch=await j('/api/dashboard/schools'+Q);
+        document.getElementById('upd').textContent='updated '+new Date().toLocaleTimeString('en-GB');
+        var schools=(sch&&sch.schools)?sch.schools.slice():[];
+        // exclude the UNASSIGNED bucket for the school view if present with 0 name
+        schools=schools.filter(function(s){return s.schoolName && s.schoolName!=='Unassigned';});
+
+        var totalRegs=0, totalDone=0, totalLive=0, full=0, behind=0;
+        var tiers=[0,0,0,0];
+        schools.forEach(function(s){
+          var cr=s.completionRate!=null?s.completionRate:pct(s.COMPLETED,s.total);
+          totalRegs+=s.total||0; totalDone+=s.COMPLETED||0; totalLive+=s.IN_PROGRESS||0;
+          if(cr>=95){full++;tiers[0]++;} else if(cr>=70){tiers[1]++;} else if(cr>=50){tiers[2]++;} else {behind++;tiers[3]++;}
+        });
+        var avgComp=totalRegs>0?Math.round(totalDone/totalRegs*1000)/10:0;
+
+        document.getElementById('k-schools').textContent=fmt(schools.length);
+        document.getElementById('k-students').textContent=fmt(totalRegs);
+        document.getElementById('k-regs').textContent='exam sittings';
+        document.getElementById('k-comp').textContent=avgComp+'%';
+        document.getElementById('k-comp-s').textContent=fmt(totalDone)+' of '+fmt(totalRegs)+' delivered';
+        document.getElementById('k-full').textContent=fmt(full);
+        document.getElementById('k-live').textContent=fmt(totalLive);
+        document.getElementById('k-behind').textContent=fmt(behind);
+        document.getElementById('t1').textContent=fmt(tiers[0]);
+        document.getElementById('t2').textContent=fmt(tiers[1]);
+        document.getElementById('t3').textContent=fmt(tiers[2]);
+        document.getElementById('t4').textContent=fmt(tiers[3]);
+
+        // sort ascending by completion so schools needing follow-up are on top
+        schools.sort(function(a,b){
+          var ca=a.completionRate!=null?a.completionRate:pct(a.COMPLETED,a.total);
+          var cb=b.completionRate!=null?b.completionRate:pct(b.COMPLETED,b.total);
+          return ca-cb;
+        });
+        document.getElementById('tblcnt').textContent=schools.length+' schools · sorted by delivery (lowest first)';
+
+        var tb=document.getElementById('rows'); tb.innerHTML='';
+        schools.forEach(function(s,i){
+          var cr=s.completionRate!=null?s.completionRate:pct(s.COMPLETED,s.total);
+          var pending=(s.NOT_STARTED||0)+(s.NOT_SYNCED||0);
+          var tr=document.createElement('tr'); if(cr<50)tr.className='warnrow';
+          tr.innerHTML='<td class="nm"><span class="rk">'+(i+1)+'</span><span class="dot" style="background:'+barColor(cr)+'"></span>'+s.schoolName+'</td>'+
+            '<td class="num">'+fmt(s.total)+'</td>'+
+            '<td class="num" style="color:#26c281">'+fmt(s.COMPLETED||0)+'</td>'+
+            '<td class="num" style="color:#f0b429">'+fmt(s.IN_PROGRESS||0)+'</td>'+
+            '<td class="num">'+fmt(s.NOT_STARTED||0)+'</td>'+
+            '<td class="num" style="color:'+(pending>0?'#e05260':'#666d84')+'">'+fmt(pending)+'</td>'+
+            '<td><div class="cbar"><div class="track"><span style="width:'+cr+'%;background:'+barColor(cr)+'"></span></div><span class="p">'+cr+'%</span></div></td>';
+          tb.appendChild(tr);
+        });
+      }catch(e){}
+    }
+    load(); setInterval(load,6000);
+  </script>
+</body>
+</html>

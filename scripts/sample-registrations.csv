@@ -1,0 +1,6 @@
+StudentId,NameArabic,NameEnglish,SchoolId,SchoolName,Grade,EmiratesId,ClassCode,ExamSubject,ExamName,StartDate,EndDate,StartTime,EndTime,TestCode,ProctorCode,AccessToken,AcademicYear,Attendance
+100001,سارة أحمد,Sara Ahmed,SCH-FUJ-01,Fujairah Primary,5,784-1990-1234567-1,5A,Arabic Reading,EMSAT Arabic G5,2026-09-01,2026-09-05,09:00,10:30,FUJ-290-263-565,PRC-001,AT-100001,2025-2026,Present
+100002,علي محمد,Ali Mohamed,SCH-FUJ-01,Fujairah Primary,5,784-1990-1234567-2,5A,English,EMSAT English G5,2026-09-01,2026-09-05,09:00,10:30,FUJ-290-263-566,PRC-001,AT-100002,2025-2026,Present
+100003,ندى خالد,Nada Khaled,SCH-FUJ-02,Fujairah Model,6,784-1990-1234567-3,6B,Mathematics,EMSAT Math G6,2026-09-02,2026-09-06,11:00,12:30,ABU-111-222-333,PRC-002,AT-100003,2025-2026,Absent
+100004,يوسف سالم,Yousef Salem,SCH-FUJ-02,Fujairah Model,6,784-1990-1234567-4,6B,Science,EMSAT Science G6,2026-09-02,2026-09-06,11:00,12:30,DXB-444-555-666,PRC-002,AT-100004,2025-2026,Present
+100005,مريم عبدالله,Mariam Abdullah,SCH-FUJ-01,Fujairah Primary,5,784-1990-1234567-5,5B,Arabic Writing,EMSAT Arabic G5,2026-09-01,2026-09-05,09:00,10:30,SHJ-777-888-999,PRC-003,AT-100005,2025-2026,Present

@@ -1,0 +1,58 @@
+<%- include('partials/head') %>
+<%- include('partials/nav') %>
+
+<div class="kpis">
+  <div class="kpi info"><div class="label">Total Registered</div><div class="value"><%= kpis.totalRegistered %></div></div>
+  <div class="kpi"><div class="label">Not Synced</div><div class="value"><%= kpis.NOT_SYNCED %></div></div>
+  <div class="kpi"><div class="label">Not Started</div><div class="value"><%= kpis.NOT_STARTED %></div></div>
+  <div class="kpi warn"><div class="label">In Progress</div><div class="value"><%= kpis.IN_PROGRESS %></div></div>
+  <div class="kpi ok"><div class="label">Completed</div><div class="value"><%= kpis.COMPLETED %></div></div>
+  <div class="kpi err"><div class="label">API Errors</div><div class="value"><%= kpis.apiErrors %></div></div>
+</div>
+
+<div class="kpis">
+  <div class="kpi ok"><div class="label">Sync Success Rate</div><div class="value"><%= kpis.syncSuccessRate %>%</div></div>
+  <div class="kpi info"><div class="label">Avg Response Time</div><div class="value"><%= kpis.avgResponseTimeMs %><span style="font-size:13px"> ms</span></div></div>
+  <div class="kpi"><div class="label">Completion Rate</div><div class="value"><%= kpis.completionRate %>%</div></div>
+  <div class="kpi"><div class="label">Avg Time Used</div><div class="value"><%= Math.round(kpis.avgTimeUsedSeconds/60) %><span style="font-size:13px"> min</span></div></div>
+  <div class="kpi"><div class="label">Avg Raw Score</div><div class="value"><%= kpis.avgRawScore === null ? '—' : kpis.avgRawScore %></div></div>
+  <div class="kpi"><div class="label">Avg Scaled Score</div><div class="value"><%= kpis.avgScaledScore === null ? '—' : kpis.avgScaledScore %></div></div>
+</div>
+
+<div class="grid2">
+  <div class="panel">
+    <h2>Registrations by Subject</h2>
+    <table>
+      <thead><tr><th>Subject</th><th>Not Started</th><th>In Progress</th><th>Completed</th></tr></thead>
+      <tbody>
+        <% Object.keys(bySubject).forEach(function(subj){ var s = bySubject[subj]; %>
+          <tr>
+            <td><%= subj %></td>
+            <td><%= s.NOT_STARTED || 0 %></td>
+            <td><%= s.IN_PROGRESS || 0 %></td>
+            <td><%= s.COMPLETED || 0 %></td>
+          </tr>
+        <% }); %>
+        <% if (Object.keys(bySubject).length === 0) { %><tr><td colspan="4" class="muted">No data yet — import registrations to begin.</td></tr><% } %>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="panel">
+    <h2>Completion by School</h2>
+    <table>
+      <thead><tr><th>School</th><th>Total</th><th>Completed</th><th style="width:160px">Rate</th></tr></thead>
+      <tbody>
+        <% bySchool.forEach(function(s){ %>
+          <tr>
+            <td><%= s.name %></td><td><%= s.total %></td><td><%= s.completed %></td>
+            <td><div class="bar"><span style="width:<%= s.completionRate %>%"></span></div><span class="muted"><%= s.completionRate %>%</span></td>
+          </tr>
+        <% }); %>
+        <% if (bySchool.length === 0) { %><tr><td colspan="4" class="muted">No data yet.</td></tr><% } %>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<%- include('partials/foot') %>

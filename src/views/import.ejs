@@ -1,0 +1,73 @@
+<%- include('partials/head') %>
+<%- include('partials/nav') %>
+
+<div class="panel">
+  <h2>Upload Registrations (CSV / XLSX)</h2>
+  <p class="muted">Required columns: StudentId, ExamSubject, TestCode. Matching key for upsert: StudentId + ExamSubject + TestCode. <b>Program (SPA/ABA)</b> is chosen here and applied to every row in the file.</p>
+  <form action="/import/preview" method="post" enctype="multipart/form-data" class="filters">
+    <input type="file" name="file" accept=".csv,.xlsx,.xls" required />
+    <label>Program
+      <select name="programType"><option value="">— none —</option><option value="SPA">SPA</option><option value="ABA">ABA</option></select>
+    </label>
+    <button class="btn secondary" type="submit">Validate / Preview</button>
+  </form>
+  <form id="commitForm" action="/import/commit" method="post" enctype="multipart/form-data" class="filters" style="margin-top:8px">
+    <input type="file" name="file" accept=".csv,.xlsx,.xls" required />
+    <label>Program
+      <select name="programType"><option value="">— none —</option><option value="SPA">SPA</option><option value="ABA">ABA</option></select>
+    </label>
+    <button class="btn" type="submit">Confirm &amp; Import</button>
+  </form>
+</div>
+<script>
+  document.getElementById('commitForm').addEventListener('submit', function (e) {
+    if (!confirm('Commit will create/update registrations. Continue?')) e.preventDefault();
+  });
+</script>
+
+<% if (result) { %>
+<div class="panel">
+  <h2><%= result.preview ? 'Preview' : 'Import' %> Summary</h2>
+  <div class="kpis">
+    <div class="kpi info"><div class="label">Total Rows</div><div class="value"><%= result.totalRows %></div></div>
+    <div class="kpi ok"><div class="label"><%= result.preview ? 'Valid' : 'Created' %></div><div class="value"><%= result.preview ? result.skipped : result.created %></div></div>
+    <% if (!result.preview) { %><div class="kpi"><div class="label">Updated</div><div class="value"><%= result.updated %></div></div><% } %>
+    <div class="kpi err"><div class="label">Errors</div><div class="value"><%= result.errors.length %></div></div>
+    <div class="kpi warn"><div class="label">Failed Upserts</div><div class="value"><%= result.failed %></div></div>
+  </div>
+  <% if (result.unresolvedSubjects && result.unresolvedSubjects.length) { %>
+    <div class="alert">Unresolved subjects (no active workspace mapping): <%= result.unresolvedSubjects.join(', ') %>. Map them in Integration Settings.</div>
+  <% } %>
+  <% if (result.errors.length) { %>
+    <p><a class="btn secondary sm" href="/import/<%= result.importJobId %>/errors.csv">Download error report (CSV)</a></p>
+    <table>
+      <thead><tr><th>Row</th><th>Column</th><th>Value</th><th>Message</th></tr></thead>
+      <tbody>
+        <% result.errors.slice(0,100).forEach(function(e){ %>
+          <tr><td><%= e.rowNumber %></td><td><%= e.column||'' %></td><td class="mono"><%= e.value||'' %></td><td><%= e.message %></td></tr>
+        <% }); %>
+      </tbody>
+    </table>
+  <% } %>
+</div>
+<% } %>
+
+<div class="panel">
+  <h2>Previous Imports</h2>
+  <table>
+    <thead><tr><th>File</th><th>Status</th><th>Total</th><th>Created</th><th>Updated</th><th>Failed</th><th>When</th><th></th></tr></thead>
+    <tbody>
+      <% jobs.forEach(function(j){ %>
+        <tr>
+          <td><%= j.fileName %></td><td><span class="status <%= j.status==='COMPLETED'?'OK':'PENDING' %>"><%= j.status %></span></td>
+          <td><%= j.totalRows %></td><td><%= j.createdCount %></td><td><%= j.updatedCount %></td><td><%= j.failedCount %></td>
+          <td class="muted"><%= new Date(j.createdAt).toLocaleString() %></td>
+          <td><a class="btn secondary sm" href="/import/<%= j.id %>/errors.csv">Errors</a></td>
+        </tr>
+      <% }); %>
+      <% if (jobs.length===0){ %><tr><td colspan="8" class="muted">No imports yet.</td></tr><% } %>
+    </tbody>
+  </table>
+</div>
+
+<%- include('partials/foot') %>

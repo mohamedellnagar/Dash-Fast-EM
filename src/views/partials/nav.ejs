@@ -1,0 +1,105 @@
+<% function can(p){ return principal && principal.permissions && principal.permissions.has(p); } %>
+<div class="app">
+  <aside class="sidebar">
+    <div class="brand">FastTest<small>Live Monitoring & Analytics</small></div>
+    <form class="year-picker" method="get" action="/prefs/academic-year" style="padding:8px 12px 4px">
+      <label style="font-size:12px;color:var(--muted,#8a897f);display:block;margin-bottom:4px">📅 Academic Year</label>
+      <select name="year" id="yearPicker" style="width:100%">
+        <option value="">All years</option>
+        <% (typeof academicYears!=='undefined'?academicYears:[]).forEach(function(y){ %>
+          <option value="<%= y %>" <%= (typeof selectedYear!=='undefined' && selectedYear===y)?'selected':'' %>><%= y %></option>
+        <% }); %>
+      </select>
+    </form>
+    <form class="program-picker" method="get" action="/prefs/program" style="padding:0 12px 8px">
+      <label style="font-size:12px;color:var(--muted,#8a897f);display:block;margin-bottom:4px">🎓 Program</label>
+      <select name="program" id="programPicker" style="width:100%">
+        <option value="">All programs</option>
+        <% (typeof programTypes!=='undefined'?programTypes:['SPA','ABA']).forEach(function(p){ %>
+          <option value="<%= p %>" <%= (typeof selectedProgram!=='undefined' && selectedProgram===p)?'selected':'' %>><%= p %></option>
+        <% }); %>
+      </select>
+    </form>
+    <%
+      // Section visibility: a header only renders when at least one of its links
+      // is permitted for this user (avoids empty group headers).
+      var showScreens = can('dashboard:view') || can('queue:view');
+      var showDash    = can('monitoring:view') || can('dashboard:view');
+      var showSync    = can('sync:view') || can('queue:view') || can('sync:manual') || can('apimonitoring:view') || can('alert:view');
+      var showData    = can('import:run') || can('export:run');
+      var showAdmin   = can('integration:manage') || can('apimonitoring:view') || can('audit:view');
+      var isABA = (typeof selectedProgram!=='undefined' && selectedProgram==='ABA');
+    %>
+    <nav class="nav">
+
+      <% if (showScreens) { %>
+        <div class="nav-group">Live Screens</div>
+        <% if (can('dashboard:view')) { %><a href="/overview" class="<%= nav==='wall'?'active':'' %>">📺 Live Overview</a><% } %>
+        <% if (can('dashboard:view') && isABA) { %><a href="/exam" class="<%= nav==='exam-ops-wall'?'active':'' %>">📋 Exam Operations ABA</a><% } %>
+        <% if (can('queue:view')) { %><a href="/ops" class="<%= nav==='ops-wall'?'active':'' %>">🖥️ Operations Center</a><% } %>
+      <% } %>
+
+      <% if (showDash) { %>
+        <div class="nav-group">Dashboards</div>
+        <% if (can('monitoring:view')) { %><a href="/monitoring" class="<%= nav==='monitoring'?'active':'' %>">📡 Live Monitoring</a><% } %>
+        <% if (can('dashboard:view')) { %><a href="/schools" class="<%= nav==='schools'?'active':'' %>">🏫 Schools Dashboard</a><% } %>
+        <% if (can('dashboard:view')) { %><a href="/subjects" class="<%= nav==='subjects'?'active':'' %>">📚 Subject Dashboard</a><% } %>
+      <% } %>
+
+      <% if (showSync) { %>
+        <div class="nav-group">Sync</div>
+        <% if (can('sync:view')) { %><a href="/sync" class="<%= nav==='sync-control'?'active':'' %>">🎛️ Sync Control Center</a><% } %>
+        <% if (can('queue:view')) { %><a href="/admin/queue" class="<%= nav==='queue'?'active':'' %>">🗂️ Queue Monitoring</a><% } %>
+        <% if (can('sync:view')) { %><a href="/admin/sync-history" class="<%= nav==='sync-history'?'active':'' %>">🕘 Sync History</a><% } %>
+        <% if (can('sync:manual')) { %><a href="/verify" class="<%= nav==='verify'?'active':'' %>">🔎 Verify</a><% } %>
+        <% if (can('apimonitoring:view')) { %><a href="/admin/fasttest-health" class="<%= nav==='fasttest-health'?'active':'' %>">🩺 FastTest Health</a><% } %>
+        <% if (can('alert:view')) { %><a href="/admin/alerts" class="<%= nav==='alerts'?'active':'' %>">🔔 Alerts</a><% } %>
+      <% } %>
+
+      <% if (showData) { %>
+        <div class="nav-group">Data</div>
+        <% if (can('import:run')) { %><a href="/import" class="<%= nav==='import'?'active':'' %>">⬆️ Import Center</a><% } %>
+        <% if (can('export:run')) { %><a href="/export" class="<%= nav==='export'?'active':'' %>">📤 Reports &amp; Export</a><% } %>
+      <% } %>
+
+      <% if (showAdmin) { %>
+        <div class="nav-group">Admin</div>
+        <% if (can('integration:manage')) { %><a href="/admin/integration" class="<%= nav==='integration'?'active':'' %>">🔌 Integration Settings</a><% } %>
+        <% if (can('apimonitoring:view')) { %><a href="/admin/api-monitoring" class="<%= nav==='api-monitoring'?'active':'' %>">📡 API Monitoring</a><% } %>
+        <% if (can('audit:view')) { %><a href="/admin/audit" class="<%= nav==='audit'?'active':'' %>">📝 Audit Log</a><% } %>
+      <% } %>
+
+    </nav>
+  </aside>
+  <script>(function(){var yp=document.getElementById('yearPicker'); if(yp) yp.addEventListener('change', function(){ yp.form.submit(); }); var pp=document.getElementById('programPicker'); if(pp) pp.addEventListener('change', function(){ pp.form.submit(); });})();</script>
+  <main class="main">
+    <div class="topbar">
+      <h1><%= title %></h1>
+      <div class="user">
+        <a href="/admin/fasttest-health" id="ft-badge" class="ft-badge ft-unknown" title="FastTest live status">
+          <span class="ft-dot"></span><span id="ft-badge-txt">FastTest…</span>
+        </a>
+        <%= principal.fullName %>
+        <% principal.roles.forEach(function(r){ %><span class="badge-role"><%= r %></span> <% }); %>
+        <form action="/logout" method="post" style="display:inline"><button class="btn secondary sm" type="submit">Sign out</button></form>
+      </div>
+    </div>
+    <script>
+    (function(){
+      var badge=document.getElementById('ft-badge'), txt=document.getElementById('ft-badge-txt');
+      if(!badge||!window.EventSource) return;
+      var map={HEALTHY:{c:'ft-healthy',t:'FastTest OK'},DEGRADED:{c:'ft-degraded',t:'FastTest ⚠'},DOWN:{c:'ft-down',t:'FastTest DOWN'}};
+      function apply(d){
+        var m=map[d.verdict]||{c:'ft-unknown',t:'FastTest ?'};
+        badge.className='ft-badge '+m.c; txt.textContent=m.t;
+        badge.title='FastTest: '+d.verdict+' — '+(d.verdictReason||'')+(d.successRate!=null?(' · '+d.successRate+'% ok (1h)'):'');
+      }
+      var es;
+      function connect(){
+        try{ es=new EventSource('/api/fasttest/status/stream'); }catch(e){ return; }
+        es.onmessage=function(e){ try{ apply(JSON.parse(e.data)); }catch(_){} };
+        es.onerror=function(){ if(es){es.close();} setTimeout(connect,5000); };
+      }
+      connect();
+    })();
+    </script>

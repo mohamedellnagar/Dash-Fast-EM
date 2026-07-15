@@ -1,0 +1,62 @@
+<%- include('partials/head') %>
+<%- include('partials/nav') %>
+
+<div class="toolbar">
+  <a href="/subjects">← Subject Dashboard</a>
+  <% if (principal.permissions.has('export:run')) { %><a class="btn secondary sm" href="/export/registrations?preset=CURRENT_FILTER&format=xlsx&examSubject=<%= encodeURIComponent(examSubject) %>">Export subject (XLSX)</a><% } %>
+</div>
+
+<div class="panel">
+  <h2><%= examSubject %></h2>
+  <div class="kpis" style="margin-bottom:0">
+    <div class="kpi info"><div class="label">Total Registrations</div><div class="value"><%= kpis.totalRegistered %></div></div>
+    <div class="kpi"><div class="label">Not Started</div><div class="value"><%= kpis.NOT_STARTED %></div></div>
+    <div class="kpi warn"><div class="label">In Progress</div><div class="value"><%= kpis.IN_PROGRESS %></div></div>
+    <div class="kpi ok"><div class="label">Completed</div><div class="value"><%= kpis.COMPLETED %></div></div>
+    <div class="kpi ok"><div class="label">Completion Rate</div><div class="value"><%= kpis.completionRate %>%</div></div>
+    <div class="kpi <%= kpis.staleCount>0?'warn':'' %>"><div class="label">Stale Records</div><div class="value"><%= kpis.staleCount %></div></div>
+    <div class="kpi"><div class="label">Avg Duration</div><div class="value"><%= kpis.avgTimeUsedSeconds===null?'—':Math.round(kpis.avgTimeUsedSeconds/60)+'m' %></div></div>
+    <div class="kpi"><div class="label">Avg Raw Score</div><div class="value"><%= kpis.avgRawScore===null?'—':kpis.avgRawScore %></div></div>
+    <div class="kpi"><div class="label">Avg Scaled Score</div><div class="value"><%= kpis.avgScaledScore===null?'—':kpis.avgScaledScore %></div></div>
+    <div class="kpi ok"><div class="label">Correct</div><div class="value"><%= cis.correct %></div></div>
+    <div class="kpi err"><div class="label">Incorrect</div><div class="value"><%= cis.incorrect %></div></div>
+    <div class="kpi"><div class="label">Skipped</div><div class="value"><%= cis.skipped %></div></div>
+  </div>
+</div>
+
+<% if (workspace) { %>
+<div class="panel">
+  <h2>Workspace Health</h2>
+  <dl class="kv">
+    <dt>Workspace</dt><dd><%= workspace.workspaceName %></dd>
+    <dt>Connection Status</dt><dd><span class="status <%= workspace.connectionStatus==='SUCCESS'?'OK':(workspace.connectionStatus==='FAILED'?'ERROR':'PENDING') %>"><%= workspace.connectionStatus %></span></dd>
+    <dt>Last Authentication</dt><dd><%= workspace.lastAuthenticationAt?new Date(workspace.lastAuthenticationAt).toLocaleString():'never' %> (<%= workspace.lastAuthenticationStatus || '—' %>)</dd>
+    <dt>Last Successful Sync</dt><dd><%= workspace.lastSuccessfulSyncAt?new Date(workspace.lastSuccessfulSyncAt).toLocaleString():'never' %></dd>
+    <dt>Avg API Response</dt><dd><%= workspace.avgResponseTimeMs %> ms</dd>
+    <dt>API Success Rate</dt><dd><%= workspace.apiSuccessRate %>%</dd>
+    <dt>Stale Data Count</dt><dd><%= workspace.staleDataCount %></dd>
+  </dl>
+</div>
+<% } %>
+
+<div class="grid2">
+  <div class="panel"><h2>Status Distribution</h2><%- include('partials/statusbar', { counts: statusDist.counts, total: statusDist.total }) %></div>
+  <div class="panel"><h2>Score Distribution</h2><%- include('partials/hbars', { bars: dist.map(function(b){return {label:b.label, value:b.count};}) }) %></div>
+</div>
+
+<div class="grid3">
+  <div class="panel"><h2>Completion % by School</h2><%- include('partials/hbars', { bars: bySchool.map(function(s){return {label:s.schoolName, value:s.completionRate};}), unit:'%', pct:true }) %></div>
+  <div class="panel"><h2>Completion % by Grade</h2><%- include('partials/hbars', { bars: byGrade.map(function(g){return {label:'Grade '+g.grade, value:g.completionRate};}), unit:'%', pct:true }) %></div>
+  <div class="panel"><h2>Avg Score by School</h2><%- include('partials/hbars', { bars: scoresBySchool.map(function(s){return {label:s.schoolName, value:s.avgRawScore};}) }) %></div>
+</div>
+
+<div class="grid2">
+  <div class="panel"><h2>Registrations over Time</h2>
+    <% var tmax = trends.reduce(function(m,t){return Math.max(m,t.total);},0)||1; %>
+    <div class="spark"><% trends.slice(-30).forEach(function(t){ %><span style="height:<%= Math.max(4, t.total/tmax*60) %>px" title="<%= t.date %>: <%= t.total %>"></span><% }); %></div>
+    <% if(trends.length===0){ %><div class="empty">No dated registrations</div><% } %>
+  </div>
+  <div class="panel"><h2>Avg Duration by School</h2><%- include('partials/hbars', { bars: bySchool.map(function(s){return {label:s.schoolName, value: s.avgTimeUsed===null?null:Math.round(s.avgTimeUsed/60)};}), unit:'m' }) %></div>
+</div>
+
+<%- include('partials/foot') %>

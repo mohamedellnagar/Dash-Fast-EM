@@ -1,0 +1,74 @@
+<%- include('partials/head') %>
+<%- include('partials/nav') %>
+<% var canManage = principal.permissions.has('attention:manage'); %>
+
+<div class="kpis">
+  <div class="kpi err"><div class="label">Open Items</div><div class="value"><%= summary.total %></div></div>
+  <div class="kpi"><div class="label">High Severity</div><div class="value sev-HIGH"><%= summary.bySeverity.HIGH || 0 %></div></div>
+  <div class="kpi warn"><div class="label">Medium</div><div class="value"><%= summary.bySeverity.MEDIUM || 0 %></div></div>
+  <div class="kpi"><div class="label">Low</div><div class="value"><%= summary.bySeverity.LOW || 0 %></div></div>
+</div>
+
+<div class="panel">
+  <form method="get" class="toolbar">
+    <label>Status <select name="status"><option value="">All</option><% statuses.forEach(function(s){ %><option value="<%= s %>" <%= query.status===s?'selected':'' %>><%= s %></option><% }); %></select></label>
+    <label>Severity <select name="severity"><option value="">All</option><% severities.forEach(function(s){ %><option value="<%= s %>" <%= query.severity===s?'selected':'' %>><%= s %></option><% }); %></select></label>
+    <label>Issue <select name="issueType"><option value="">All</option><% issueTypes.forEach(function(s){ %><option value="<%= s %>" <%= query.issueType===s?'selected':'' %>><%= s.replace(/_/g,' ') %></option><% }); %></select></label>
+    <button class="btn" type="submit">Filter</button>
+    <a class="btn secondary" href="/attention">Reset</a>
+    <% if (principal.permissions.has('export:run')) { %><a class="btn secondary" href="/export/registrations?preset=ATTENTION&format=xlsx">Export XLSX</a><% } %>
+    <% if (canManage) { %><button class="btn" type="button" id="refreshBtn" style="margin-left:auto">Recompute Queue</button><% } %>
+  </form>
+
+  <div style="overflow-x:auto">
+  <table>
+    <thead><tr><th>Student</th><th>School</th><th>Subject</th><th>TestCode</th><th>Issue</th><th>Severity</th><th>Status</th><th>Retry</th><th>Last Sync</th><th>Recommended Action</th><th></th></tr></thead>
+    <tbody>
+      <% data.rows.forEach(function(a){ var r=a.registration; %>
+        <tr>
+          <td class="mono"><%= r.studentExternalId %><br><span class="muted"><%= r.student && r.student.nameEnglish || '' %></span></td>
+          <td><%= r.school && r.school.name || '—' %></td>
+          <td><%= r.examSubject %></td>
+          <td class="mono"><%= r.testCodeOriginal %></td>
+          <td><%= a.issueType.replace(/_/g,' ') %><% if(a.lastError){ %><br><span class="muted mono" style="font-size:11px"><%= a.lastError.slice(0,60) %></span><% } %></td>
+          <td class="sev-<%= a.severity %>"><%= a.severity %></td>
+          <td><span class="status <%= a.status==='RESOLVED'?'OK':(a.status==='OPEN'?'ERROR':'PENDING') %>"><%= a.status %></span><% if(a.assignedTo){ %><br><span class="muted">→ <%= a.assignedTo.fullName %></span><% } %></td>
+          <td><%= a.retryCount %></td>
+          <td class="muted"><%= r.lastSyncAt ? new Date(r.lastSyncAt).toLocaleString() : '—' %></td>
+          <td class="muted" style="max-width:240px"><%= a.recommendedAction %></td>
+          <td>
+            <a class="btn secondary sm" href="/registrations/<%= r.id %>">View</a>
+            <% if (canManage && a.status!=='RESOLVED') { %>
+              <button class="btn sm resolve-btn" data-id="<%= a.id %>">Resolve</button>
+            <% } %>
+          </td>
+        </tr>
+      <% }); %>
+      <% if (data.rows.length===0){ %><tr><td colspan="11" class="empty">No items require attention. 🎉 Use "Recompute Queue" to scan current data.</td></tr><% } %>
+    </tbody>
+  </table>
+  </div>
+  <div class="pager"><span>Page <%= data.page %> of <%= data.totalPages %> · <%= data.total %> items</span>
+    <% var qp = new URLSearchParams(query); %>
+    <% if (data.page>1){ qp.set('page', data.page-1); %><a class="btn secondary sm" href="/attention?<%= qp.toString() %>">← Prev</a><% } %>
+    <% if (data.page<data.totalPages){ qp.set('page', data.page+1); %><a class="btn secondary sm" href="/attention?<%= qp.toString() %>">Next →</a><% } %>
+  </div>
+</div>
+
+<script>
+  var rb = document.getElementById('refreshBtn');
+  if (rb) rb.addEventListener('click', async function(){
+    rb.disabled = true; rb.textContent = 'Recomputing…';
+    try { const r = await fetch('/api/attention/refresh', {method:'POST', headers:{'Accept':'application/json'}}); const j = await r.json(); rb.textContent = 'Detected '+j.detected; setTimeout(function(){location.reload();}, 700); }
+    catch(e){ rb.textContent = 'Failed'; rb.disabled = false; }
+  });
+  document.querySelectorAll('.resolve-btn').forEach(function(b){
+    b.addEventListener('click', async function(){
+      b.disabled = true;
+      try { await fetch('/api/attention/'+b.dataset.id+'/status', {method:'POST', headers:{'Content-Type':'application/json','Accept':'application/json'}, body: JSON.stringify({status:'RESOLVED'})}); location.reload(); }
+      catch(e){ b.disabled = false; }
+    });
+  });
+</script>
+
+<%- include('partials/foot') %>

@@ -1,0 +1,106 @@
+<%- include('partials/head') %>
+<%- include('partials/nav') %>
+<% var result = reg.results && reg.results[0]; var score = result && result.scores && result.scores[0]; %>
+
+<div style="margin-bottom:14px">
+  <a href="/monitoring">← Back to Live Monitoring</a>
+  <% if (principal.permissions.has('sync:manual')) { %>
+    <button class="btn sm" id="syncBtn" data-id="<%= reg.id %>" style="float:right">Manual Sync</button>
+  <% } %>
+</div>
+
+<div class="grid2">
+  <div class="panel">
+    <h2>Student</h2>
+    <dl class="kv">
+      <dt>StudentId</dt><dd class="mono"><%= reg.studentExternalId %></dd>
+      <dt>Name (Arabic)</dt><dd><%= reg.student && reg.student.nameArabic || '—' %></dd>
+      <dt>Name (English)</dt><dd><%= reg.student && reg.student.nameEnglish || '—' %></dd>
+      <dt>Emirates ID</dt><dd class="mono"><%
+        var eid = reg.student && reg.student.emiratesId;
+        if (!eid) { %>—<% } else if (canUnmaskPii) { %><%= eid %><% } else { var d = eid.replace(/\D/g,''); %>***-****-*******-<%= d.slice(-1) %><% } %></dd>
+      <dt>School</dt><dd><%= reg.school && reg.school.name || '—' %></dd>
+      <dt>Grade / Class</dt><dd><%= reg.grade || '—' %> / <%= reg.classCode || '—' %></dd>
+    </dl>
+  </div>
+  <div class="panel">
+    <h2>Test</h2>
+    <dl class="kv">
+      <dt>Subject</dt><dd><%= reg.examSubject %></dd>
+      <dt>Exam Name</dt><dd><%= reg.examName || '—' %></dd>
+      <dt>TestCode</dt><dd class="mono"><%= reg.testCodeOriginal %> → <%= reg.testCodeNormalized %></dd>
+      <dt>Proctor Code</dt><dd class="mono"><%= reg.proctorCode || '—' %></dd>
+      <dt>Exam Window</dt><dd><%= reg.startDate || '?' %> <%= reg.startTime || '' %> → <%= reg.endDate || '?' %> <%= reg.endTime || '' %></dd>
+      <dt>Attendance (source)</dt><dd><%= reg.attendanceOriginal || '—' %></dd>
+      <dt>Workspace</dt><dd><%= reg.workspace && reg.workspace.workspaceName || 'Unresolved' %></dd>
+    </dl>
+  </div>
+</div>
+
+<div class="grid2">
+  <div class="panel">
+    <h2>FastTest Status</h2>
+    <dl class="kv">
+      <dt>Dashboard Status</dt><dd><span class="status <%= reg.dashboardStatus %>"><%= reg.dashboardStatus.replace('_',' ') %></span></dd>
+      <dt>Raw Status</dt><dd><%= reg.fastTestStatus || '—' %></dd>
+      <dt>Test Id / Name</dt><dd><%= reg.fastTestTestId || '—' %> / <%= reg.fastTestTestName || '—' %></dd>
+      <dt>Examinee Id</dt><dd class="mono"><%= reg.fastTestExamineeId || '—' %></dd>
+      <dt>Registration Date</dt><dd><%= reg.fastTestRegistrationDate || '—' %></dd>
+      <dt>Actual Start Time</dt><dd><%= reg.actualStartTime || '—' %></dd>
+      <dt>Seconds Used</dt><dd><%= reg.secondsUsed != null ? reg.secondsUsed : '—' %></dd>
+    </dl>
+  </div>
+  <div class="panel">
+    <h2>Results &amp; Scores</h2>
+    <% if (result) { %>
+      <dl class="kv">
+        <dt>Passed</dt><dd><%= result.passed === null ? '—' : (result.passed ? 'Yes' : 'No') %></dd>
+        <dt>Duration</dt><dd><%= result.durationFormatted || '—' %></dd>
+        <dt>Completion %</dt><dd><%= result.completionPercentage != null ? result.completionPercentage + '%' : '—' %></dd>
+        <dt>Attempted / Total</dt><dd><%= result.attemptedItems != null ? result.attemptedItems : '—' %> / <%= result.totalItemsCount != null ? result.totalItemsCount : '—' %></dd>
+        <% if (score) { %>
+        <dt>Raw / Scaled Score</dt><dd><%= score.rawScore != null ? score.rawScore : '—' %> / <%= score.scaledScore != null ? score.scaledScore : '—' %></dd>
+        <dt>Sum / Cut Score</dt><dd><%= score.sumScore != null ? score.sumScore : '—' %> / <%= score.cutScore != null ? score.cutScore : '—' %></dd>
+        <dt>Correct / Incorrect / Skipped</dt><dd><%= score.correct||0 %> / <%= score.incorrect||0 %> / <%= score.skipped||0 %></dd>
+        <% } %>
+        <dt>Session</dt><dd><%= result.testSessionName || '—' %> (<%= result.testSessionId || '—' %>)</dd>
+        <dt>Group Path</dt><dd><%= result.examineeGroupPath || '—' %></dd>
+      </dl>
+    <% } else { %>
+      <p class="muted">No results fetched yet. Results are fetched once the status reaches Completed.</p>
+    <% } %>
+  </div>
+</div>
+
+<div class="panel">
+  <h2>Sync Diagnostics</h2>
+  <dl class="kv">
+    <dt>Last Sync</dt><dd><%= reg.lastSyncAt ? new Date(reg.lastSyncAt).toLocaleString() : '—' %></dd>
+    <dt>Sync Status</dt><dd><span class="status <%= reg.syncStatus %>"><%= reg.syncStatus %></span></dd>
+    <dt>Retry Count</dt><dd><%= reg.syncRetryCount %></dd>
+    <dt>Last Error</dt><dd class="mono"><%= reg.syncError || '—' %></dd>
+    <dt>Next Sync</dt><dd><%= reg.nextSyncAt ? new Date(reg.nextSyncAt).toLocaleString() : '—' %></dd>
+  </dl>
+</div>
+
+<% if (canSeeRaw && result) { %>
+<div class="panel">
+  <h2>Raw API Response <span class="muted">(administrators only)</span></h2>
+  <div class="raw"><%= result.rawJson %></div>
+</div>
+<% } %>
+
+<script>
+  const btn = document.getElementById('syncBtn');
+  if (btn) btn.addEventListener('click', async () => {
+    btn.disabled = true; btn.textContent = 'Syncing…';
+    try {
+      const res = await fetch('/api/registrations/' + btn.dataset.id + '/sync', { method: 'POST', headers: { 'Accept':'application/json' } });
+      const j = await res.json();
+      btn.textContent = j.ok ? 'Synced ✓' : ('Error: ' + (j.errorType||''));
+      setTimeout(() => location.reload(), 800);
+    } catch(e) { btn.textContent = 'Failed'; btn.disabled = false; }
+  });
+</script>
+
+<%- include('partials/foot') %>

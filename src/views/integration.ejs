@@ -1,0 +1,85 @@
+<%- include('partials/head') %>
+<%- include('partials/nav') %>
+
+<% if (flash) { %><div class="alert ok"><%= flash %></div><% } %>
+
+<div class="panel">
+  <h2>FastTest Workspaces</h2>
+  <table>
+    <thead><tr><th>Workspace</th><th>Subject</th><th>Base URL</th><th>API Key</th><th>Active</th><th>Sync</th><th>Last Auth</th><th></th></tr></thead>
+    <tbody>
+      <% workspaces.forEach(function(w){ %>
+        <tr>
+          <td><%= w.workspaceName %></td>
+          <td><%= w.subjectCode %></td>
+          <td class="mono" style="max-width:220px;overflow:hidden;text-overflow:ellipsis"><%= w.baseUrl %></td>
+          <td class="mono"><%= w.hasApiKey ? w.restApiKeyMasked : '(none)' %></td>
+          <td><%= w.isActive ? 'Yes' : 'No' %></td>
+          <td><%= w.syncEnabled ? 'On' : 'Off' %></td>
+          <td>
+            <% if (w.lastAuthenticationStatus) { %>
+              <span class="status <%= w.lastAuthenticationStatus==='SUCCESS'?'OK':'ERROR' %>"><%= w.lastAuthenticationStatus %></span>
+              <span class="muted"><%= w.lastAuthenticationAt ? new Date(w.lastAuthenticationAt).toLocaleString() : '' %></span>
+            <% } else { %><span class="muted">never</span><% } %>
+          </td>
+          <td><button class="btn secondary sm test-btn" data-id="<%= w.id %>">Test</button></td>
+        </tr>
+      <% }); %>
+      <% if (workspaces.length===0){ %><tr><td colspan="8" class="muted">No workspaces configured.</td></tr><% } %>
+    </tbody>
+  </table>
+</div>
+
+<div class="grid2">
+  <div class="panel">
+    <h2>Add Workspace</h2>
+    <form action="/admin/integration/workspaces" method="post">
+      <div class="filters" style="flex-direction:column;align-items:stretch">
+        <label>Workspace Name<input name="workspaceName" required /></label>
+        <label>Subject Code (canonical, e.g. ARABIC)<input name="subjectCode" required /></label>
+        <label>Base URL<input name="baseUrl" type="url" value="https://uae.fasttestweb.com/FastTest/api" required /></label>
+        <label>REST API Key<input name="restApiKey" type="password" placeholder="stored encrypted" /></label>
+        <label>Username (optional)<input name="username" /></label>
+        <label>Password (optional)<input name="password" type="password" /></label>
+        <label>Token TTL (seconds)<input name="tokenTTL" type="number" value="3600" /></label>
+        <button class="btn" type="submit">Create Workspace</button>
+      </div>
+    </form>
+  </div>
+
+  <div class="panel">
+    <h2>Subject Alias Mappings</h2>
+    <form action="/admin/integration/mappings" method="post" class="filters">
+      <label>Alias (as in source ExamSubject)<input name="subjectAlias" placeholder="Arabic Reading" required /></label>
+      <label>Workspace
+        <select name="workspaceId" required>
+          <% workspaces.forEach(function(w){ %><option value="<%= w.id %>"><%= w.workspaceName %></option><% }); %>
+        </select>
+      </label>
+      <button class="btn" type="submit">Save Mapping</button>
+    </form>
+    <table style="margin-top:12px">
+      <thead><tr><th>Alias</th><th>→ Workspace</th></tr></thead>
+      <tbody>
+        <% mappings.forEach(function(m){ %><tr><td><%= m.subjectAlias %></td><td><%= m.workspace.workspaceName %></td></tr><% }); %>
+        <% if (mappings.length===0){ %><tr><td colspan="2" class="muted">No aliases mapped.</td></tr><% } %>
+      </tbody>
+    </table>
+  </div>
+</div>
+
+<script>
+  document.querySelectorAll('.test-btn').forEach(function(b){
+    b.addEventListener('click', async function(){
+      b.disabled = true; b.textContent = 'Testing…';
+      try {
+        const res = await fetch('/admin/integration/workspaces/' + b.dataset.id + '/test', { method:'POST', headers:{'Accept':'application/json'} });
+        const j = await res.json();
+        b.textContent = j.ok ? 'OK ✓' : ('Fail: ' + (j.error||''));
+      } catch(e){ b.textContent = 'Error'; }
+      b.disabled = false;
+    });
+  });
+</script>
+
+<%- include('partials/foot') %>

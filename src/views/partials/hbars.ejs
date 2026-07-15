@@ -1,0 +1,16 @@
+<%
+  // locals: bars = [{label, value}], unit (optional), pct (optional bool)
+  var _unit = typeof unit !== 'undefined' ? unit : '';
+  var _pct = typeof pct !== 'undefined' && pct;
+  var _max = bars.reduce(function(m, b){ return Math.max(m, Number(b.value)||0); }, 0) || 1;
+%>
+<div class="chart-hbars">
+  <% bars.forEach(function(b){ var v = Number(b.value)||0; var w = Math.round((v/_max)*100); %>
+    <div class="hbar-row">
+      <span class="lbl" title="<%= b.label %>"><%= b.label %></span>
+      <span class="track"><span class="fill" style="width:<%= _pct ? Math.min(v,100) : w %>%"></span></span>
+      <span class="num"><%= (b.value===null||b.value===undefined) ? '—' : b.value %><%= _unit %></span>
+    </div>
+  <% }); %>
+  <% if (bars.length === 0) { %><div class="empty">No data</div><% } %>
+</div>

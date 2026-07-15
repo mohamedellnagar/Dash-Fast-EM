@@ -1,0 +1,26 @@
+<%- include('partials/head') %>
+<%- include('partials/nav') %>
+
+<div class="panel">
+  <h2>Workers</h2>
+  <table>
+    <thead><tr><th>Worker</th><th>Host</th><th>PID</th><th>Version</th><th>Status</th><th>Started</th><th>Last Heartbeat</th><th>Current</th><th>Completed</th><th>Failed</th><th>Avg Job</th><th>Memory</th></tr></thead>
+    <tbody>
+      <% workers.forEach(function(w){ %>
+        <tr>
+          <td class="mono"><%= w.id %></td>
+          <td><%= w.hostname || '—' %></td><td><%= w.pid || '—' %></td><td><%= w.version || '—' %></td>
+          <td><span class="status <%= w.status==='HEALTHY'?'OK':(w.status==='OFFLINE'?'ERROR':'PENDING') %>"><%= w.status %></span></td>
+          <td class="muted"><%= new Date(w.startedAt).toLocaleString() %></td>
+          <td class="muted"><%= new Date(w.lastHeartbeatAt).toLocaleTimeString() %></td>
+          <td><%= w.currentJobs %></td><td><%= w.jobsCompleted %></td><td><%= w.jobsFailed %></td>
+          <td><%= w.avgJobDurationMs %> ms</td><td><%= w.memoryMb != null ? w.memoryMb + ' MB' : '—' %></td>
+        </tr>
+      <% }); %>
+      <% if(workers.length===0){ %><tr><td colspan="12" class="empty">No workers registered. Start one with <span class="mono">npm run worker</span>.</td></tr><% } %>
+    </tbody>
+  </table>
+  <p class="muted" style="margin-top:8px">Statuses: HEALTHY (recent heartbeat), DEGRADED, STALE (heartbeat lapsed), OFFLINE (stopped or long-lapsed). Graceful shutdown finishes in-flight jobs before exiting.</p>
+</div>
+
+<%- include('partials/foot') %>

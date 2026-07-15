@@ -1,0 +1,215 @@
+<%- include('partials/head') %>
+<%- include('partials/nav') %>
+<% var canManage = principal.permissions.has('queue:manage'); var canRetry = principal.permissions.has('sync:retry'); var canAdmin = principal.permissions.has('sync:admin'); var canPause = principal.permissions.has('workspace:pause'); %>
+
+<div class="kpis">
+  <div class="kpi info"><div class="label">Queued</div><div class="value"><%= stats.queued %></div></div>
+  <div class="kpi warn"><div class="label">Running</div><div class="value"><%= stats.running %></div></div>
+  <div class="kpi ok"><div class="label">Completed</div><div class="value"><%= stats.completed %></div></div>
+  <div class="kpi err"><div class="label">Failed</div><div class="value"><%= stats.failed %></div></div>
+  <div class="kpi"><div class="label">Retry Scheduled</div><div class="value"><%= stats.retryScheduled %></div></div>
+  <div class="kpi err"><div class="label">Dead-Letter</div><div class="value"><%= stats.deadLetter %></div></div>
+  <div class="kpi"><div class="label">Oldest Queued</div><div class="value"><%= Math.round(stats.oldestQueuedAgeMs/1000) %><span style="font-size:13px">s</span></div></div>
+  <div class="kpi info"><div class="label">Jobs / min</div><div class="value"><%= stats.jobsLastMin %></div></div>
+  <div class="kpi ok"><div class="label">Healthy Workers</div><div class="value"><%= healthy %>/<%= workers.length %></div></div>
+</div>
+
+<% if (canManage) { %>
+<div class="panel" style="border:2px solid <%= controlState.frozen ? '#dc2626' : '#dc262655' %>;background:<%= controlState.frozen ? '#dc262618' : 'transparent' %>">
+  <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+    <div style="font-size:26px">🛑</div>
+    <div style="flex:1">
+      <div style="font-weight:800;font-size:16px">FastTest Master Switch — <span style="color:<%= controlState.frozen ? '#dc2626' : '#16a34a' %>"><%= controlState.frozen ? 'STOPPED' : 'ACTIVE' %></span></div>
+      <div class="muted-sm" style="font-size:12px">Stops <b>everything</b> talking to FastTest: sync worker, manual sync, connection tests. Emergency use.</div>
+    </div>
+    <button class="btn <%= controlState.frozen ? '' : 'secondary' %> sm" id="toggleFreeze" data-frozen="<%= controlState.frozen %>" style="<%= controlState.frozen ? 'background:#16a34a' : 'background:#dc2626;color:#fff' %>">
+      <%= controlState.frozen ? '▶ Resume FastTest' : '🛑 STOP all FastTest' %>
+    </button>
+  </div>
+</div>
+
+<div class="panel" style="border:2px solid <%= controlState.connectionTestDisabled ? '#d97706' : '#d9770655' %>;background:<%= controlState.connectionTestDisabled ? '#d9770618' : 'transparent' %>">
+  <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+    <div style="font-size:26px">🔌</div>
+    <div style="flex:1">
+      <div style="font-weight:800;font-size:16px">Connection Test — <span style="color:<%= controlState.connectionTestDisabled ? '#d97706' : '#16a34a' %>"><%= controlState.connectionTestDisabled ? 'DISABLED' : 'ENABLED' %></span></div>
+      <div class="muted-sm" style="font-size:12px">Blocks the manual <b>Connection Test</b> button only (authenticates against FastTest). Sync keeps running — this is independent of the master switch.</div>
+    </div>
+    <button class="btn <%= controlState.connectionTestDisabled ? '' : 'secondary' %> sm" id="toggleConnTest" data-disabled="<%= controlState.connectionTestDisabled %>" style="<%= controlState.connectionTestDisabled ? 'background:#16a34a' : 'background:#d97706;color:#fff' %>">
+      <%= controlState.connectionTestDisabled ? '▶ Enable Connection Test' : '⏸ Disable Connection Test' %>
+    </button>
+  </div>
+</div>
+
+<div class="panel" style="border-left:4px solid <%= controlState.allowedNow ? '#16a34a' : '#dc2626' %>">
+  <h2>Sync Control</h2>
+  <div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+    <div>
+      Engine:
+      <strong id="engineState" style="color:<%= controlState.allowedNow ? '#16a34a' : '#dc2626' %>">
+        <%= controlState.globalPaused ? 'OFF (paused)' : (controlState.allowedNow ? 'ON (running)' : 'ON — outside time window') %>
+      </strong>
+    </div>
+    <button class="btn <%= controlState.globalPaused ? '' : 'secondary' %> sm" id="toggleGlobal" data-paused="<%= controlState.globalPaused %>">
+      <%= controlState.globalPaused ? 'Turn ON' : 'Turn OFF' %>
+    </button>
+    <span style="border-left:1px solid #ccc;padding-left:14px">
+      Mode: <strong style="color:<%= controlState.fastMode ? '#f59e0b' : '#94a3b8' %>"><%= controlState.fastMode ? '⚡ FAST (turbo)' : 'Normal' %></strong>
+      <button class="btn <%= controlState.fastMode ? 'secondary' : '' %> sm" id="toggleFast" data-fast="<%= controlState.fastMode %>">
+        <%= controlState.fastMode ? 'Switch to Normal' : 'Enable Fast Sync ⚡' %>
+      </button>
+    </span>
+    <span style="border-left:1px solid #ccc;padding-left:14px">
+      Daily window (server hour 0–23):
+      <input type="number" id="winStart" min="0" max="23" style="width:56px" value="<%= controlState.windowStart == null ? '' : controlState.windowStart %>" placeholder="start">
+      →
+      <input type="number" id="winEnd" min="0" max="23" style="width:56px" value="<%= controlState.windowEnd == null ? '' : controlState.windowEnd %>" placeholder="end">
+      <button class="btn secondary sm" id="setWindow">Set</button>
+      <button class="btn secondary sm" id="clearWindow">Clear (always on)</button>
+    </span>
+  </div>
+  <div class="muted" style="margin-top:6px;font-size:12px">Off = worker stops claiming jobs immediately (no restart). Window limits sync to certain hours; leave empty to run 24/7. A start &gt; end wraps midnight (e.g. 22 → 6).</div>
+</div>
+
+<div class="panel">
+  <h2>Sync by Subject</h2>
+  <p class="muted" style="font-size:12px">Choose which ExamSubjects the worker syncs. Turning a subject OFF stops scheduling new jobs for it (already-queued jobs finish).</p>
+  <table>
+    <thead><tr><th>Exam Subject</th><th>Registrations</th><th>Sync</th><th></th></tr></thead>
+    <tbody>
+      <% subjectControls.forEach(function(s){ %>
+        <tr>
+          <td><%= s.examSubject %></td>
+          <td><%= s.total %></td>
+          <td><span class="status <%= s.paused ? 'ERROR' : 'OK' %>"><%= s.paused ? 'OFF' : 'ON' %></span></td>
+          <td><button class="btn secondary sm subj-toggle" data-subject="<%= encodeURIComponent(s.examSubject) %>" data-paused="<%= s.paused %>"><%= s.paused ? 'Turn ON' : 'Turn OFF' %></button></td>
+        </tr>
+      <% }); %>
+      <% if (subjectControls.length === 0) { %><tr><td colspan="4" class="muted">No registrations yet.</td></tr><% } %>
+    </tbody>
+  </table>
+</div>
+
+<div class="panel">
+  <h2>Sync by Academic Year</h2>
+  <p class="muted" style="font-size:12px">Choose which academic years the worker syncs. Turning a year OFF stops scheduling new jobs for it (already-queued jobs finish).</p>
+  <table>
+    <thead><tr><th>Academic Year</th><th>Registrations</th><th>Sync</th><th></th></tr></thead>
+    <tbody>
+      <% yearControls.forEach(function(y){ %>
+        <tr>
+          <td><%= y.academicYear %></td>
+          <td><%= y.total %></td>
+          <td><span class="status <%= y.paused ? 'ERROR' : 'OK' %>"><%= y.paused ? 'OFF' : 'ON' %></span></td>
+          <td><button class="btn secondary sm year-toggle" data-year="<%= encodeURIComponent(y.academicYear) %>" data-paused="<%= y.paused %>"><%= y.paused ? 'Turn ON' : 'Turn OFF' %></button></td>
+        </tr>
+      <% }); %>
+      <% if (yearControls.length === 0) { %><tr><td colspan="4" class="muted">No registrations yet.</td></tr><% } %>
+    </tbody>
+  </table>
+</div>
+<% } %>
+
+<div class="toolbar">
+  <% if (canRetry) { %><button class="btn secondary sm" id="retryFailed">Retry all failed</button><% } %>
+  <% if (canManage) { %>
+    <span class="muted">Pause job type:</span>
+    <select id="jobTypeSel"><% jobTypes.forEach(function(t){ %><option value="<%= t %>"><%= t %></option><% }); %></select>
+    <button class="btn secondary sm" id="pauseJt">Pause</button>
+    <button class="btn secondary sm" id="resumeJt">Resume</button>
+  <% } %>
+</div>
+
+<div class="grid2">
+  <div class="panel"><h2>Queue Depth (recent)</h2>
+    <% var qmax = snapshots.reduce(function(m,s){return Math.max(m, s.queuedJobs+s.runningJobs);},0)||1; %>
+    <div class="spark"><% snapshots.forEach(function(s){ %><span style="height:<%= Math.max(3,(s.queuedJobs+s.runningJobs)/qmax*60) %>px" title="q<%= s.queuedJobs %>/r<%= s.runningJobs %> @ <%= new Date(s.createdAt).toLocaleTimeString() %>"></span><% }); %></div>
+    <% if(snapshots.length===0){ %><div class="empty">No snapshots yet (worker captures every minute)</div><% } %>
+  </div>
+  <div class="panel"><h2>Jobs by Type</h2><%- include('partials/hbars', { bars: stats.byType.map(function(t){return {label:t.jobType, value:t.count};}) }) %></div>
+</div>
+
+<div class="grid2">
+  <div class="panel"><h2>Active Jobs by Workspace</h2>
+    <table><thead><tr><th>Workspace</th><th>Active Jobs</th><th>Circuit</th><th></th></tr></thead><tbody>
+      <% workspaces.forEach(function(w){ var c = (stats.byWorkspace.find(function(x){return x.workspaceId===w.id;})||{}).count||0; var cs = w.circuitBreaker && w.circuitBreaker.state || 'CLOSED'; %>
+        <tr><td><%= w.workspaceName %></td><td><%= c %></td>
+          <td><span class="status <%= cs==='CLOSED'?'OK':(cs==='OPEN'?'ERROR':'PENDING') %>"><%= cs %></span></td>
+          <td><% if (canPause) { %><button class="btn secondary sm ws-pause" data-id="<%= w.id %>" data-paused="<%= w.syncPaused %>"><%= w.syncPaused ? 'Resume' : 'Pause' %></button><% } %></td>
+        </tr>
+      <% }); %>
+    </tbody></table>
+  </div>
+  <div class="panel"><h2>Active Jobs by Priority</h2><%- include('partials/hbars', { bars: stats.byPriority.sort(function(a,b){return a.priority-b.priority;}).map(function(p){return {label:'P'+p.priority, value:p.count};}) }) %></div>
+</div>
+
+<div class="panel">
+  <h2>Dead-Letter Jobs (<%= deadLetter.length %>)</h2>
+  <table><thead><tr><th>Type</th><th>Registration</th><th>Attempts</th><th>Last Error</th><th>When</th><th></th></tr></thead><tbody>
+    <% deadLetter.forEach(function(j){ %>
+      <tr><td><%= j.jobType %></td><td class="mono"><%= (j.registrationId||'').slice(0,8) %></td><td><%= j.attemptCount %></td>
+        <td class="mono muted"><%= j.lastErrorCode || '' %>: <%= (j.lastErrorMessage||'').slice(0,50) %></td>
+        <td class="muted"><%= new Date(j.updatedAt).toLocaleString() %></td>
+        <td><% if (canAdmin) { %><button class="btn sm dl-requeue" data-id="<%= j.id %>">Requeue</button><% } %></td></tr>
+    <% }); %>
+    <% if(deadLetter.length===0){ %><tr><td colspan="6" class="empty">No dead-letter jobs 🎉</td></tr><% } %>
+  </tbody></table>
+</div>
+
+<div class="panel">
+  <h2>Recent Failed / Manual Review (<%= recentFailed.length %>)</h2>
+  <table><thead><tr><th>Type</th><th>Status</th><th>Registration</th><th>Attempts</th><th>Last Error</th><th></th></tr></thead><tbody>
+    <% recentFailed.forEach(function(j){ %>
+      <tr><td><%= j.jobType %></td><td><span class="status ERROR"><%= j.status %></span></td><td class="mono"><%= (j.registrationId||'').slice(0,8) %></td><td><%= j.attemptCount %></td>
+        <td class="mono muted"><%= j.lastErrorCode||'' %></td>
+        <td><% if (canRetry) { %><button class="btn secondary sm job-retry" data-id="<%= j.id %>">Retry</button><% } %></td></tr>
+    <% }); %>
+    <% if(recentFailed.length===0){ %><tr><td colspan="6" class="empty">None</td></tr><% } %>
+  </tbody></table>
+</div>
+
+<script>
+async function post(url, body){ const r = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json','Accept':'application/json'}, body: body?JSON.stringify(body):undefined}); return r.json(); }
+document.querySelectorAll('.job-retry').forEach(function(b){ b.onclick = async function(){ await post('/api/queue/jobs/'+b.dataset.id+'/retry'); location.reload(); }; });
+document.querySelectorAll('.dl-requeue').forEach(function(b){ b.onclick = async function(){ await post('/api/queue/jobs/'+b.dataset.id+'/requeue'); location.reload(); }; });
+document.querySelectorAll('.ws-pause').forEach(function(b){ b.onclick = async function(){ await post('/api/queue/workspaces/'+b.dataset.id+'/pause', {paused: b.dataset.paused!=='true'}); location.reload(); }; });
+var rf = document.getElementById('retryFailed'); if(rf) rf.onclick = async function(){ if(!confirm('Requeue all failed/dead-letter jobs?'))return; var j=await post('/api/queue/retry-failed'); alert('Requeued '+j.requeued); location.reload(); };
+var pj = document.getElementById('pauseJt'); if(pj) pj.onclick = async function(){ await post('/api/queue/job-types/'+document.getElementById('jobTypeSel').value+'/pause', {paused:true}); alert('Paused'); };
+var rj = document.getElementById('resumeJt'); if(rj) rj.onclick = async function(){ await post('/api/queue/job-types/'+document.getElementById('jobTypeSel').value+'/pause', {paused:false}); alert('Resumed'); };
+
+// --- Sync Control: global on/off + time window ---
+var tfz = document.getElementById('toggleFreeze');
+if(tfz) tfz.onclick = async function(){
+  var freeze = tfz.dataset.frozen!=='true';
+  if(freeze && !confirm('STOP all FastTest operations? This halts the sync worker, manual syncs, and connection tests until you resume.')) return;
+  await post('/api/queue/fasttest-freeze', {frozen: freeze}); location.reload();
+};
+var tct = document.getElementById('toggleConnTest');
+if(tct) tct.onclick = async function(){
+  var disable = tct.dataset.disabled!=='true';
+  if(disable && !confirm('Disable the Connection Test? Operators will not be able to run manual connection tests until you re-enable it. Sync is not affected.')) return;
+  await post('/api/queue/connection-test-toggle', {disabled: disable}); location.reload();
+};
+var tg = document.getElementById('toggleGlobal');
+if(tg) tg.onclick = async function(){ var turnOff = tg.dataset.paused!=='true'; await post('/api/queue/global/pause', {paused: turnOff}); location.reload(); };
+var tf = document.getElementById('toggleFast');
+if(tf) tf.onclick = async function(){ var enable = tf.dataset.fast!=='true'; if(enable && !confirm('Enable FAST sync (~20 req/s)? This replaces the normal conservative rate.')) return; await post('/api/queue/fast-mode', {enabled: enable}); location.reload(); };
+var sw = document.getElementById('setWindow');
+if(sw) sw.onclick = async function(){
+  var s = document.getElementById('winStart').value, e = document.getElementById('winEnd').value;
+  if(s===''||e===''){ alert('Enter both start and end hours (0-23), or use Clear.'); return; }
+  await post('/api/queue/window', {startHour: Number(s), endHour: Number(e)}); location.reload();
+};
+var cw = document.getElementById('clearWindow');
+if(cw) cw.onclick = async function(){ await post('/api/queue/window', {startHour:null, endHour:null}); location.reload(); };
+document.querySelectorAll('.subj-toggle').forEach(function(b){ b.onclick = async function(){
+  await post('/api/queue/subjects/pause', {subject: decodeURIComponent(b.dataset.subject), paused: b.dataset.paused!=='true'});
+  location.reload();
+}; });
+document.querySelectorAll('.year-toggle').forEach(function(b){ b.onclick = async function(){
+  await post('/api/queue/academic-years/pause', {academicYear: decodeURIComponent(b.dataset.year), paused: b.dataset.paused!=='true'});
+  location.reload();
+}; });
+</script>
+
+<%- include('partials/foot') %>

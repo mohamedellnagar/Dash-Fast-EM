@@ -1,0 +1,52 @@
+# Local/production-like stack: PostgreSQL + web + background sync worker.
+# Copy .env.example to .env and set real secrets before running.
+# For Postgres, set in .env:
+#   DATABASE_URL=postgresql://fasttest:fasttest@db:5432/fasttest?schema=public
+# and change prisma/schema.prisma datasource provider to "postgresql".
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: fasttest
+      POSTGRES_PASSWORD: fasttest
+      POSTGRES_DB: fasttest
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U fasttest"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  web:
+    build: .
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    # Apply migrations then start the server.
+    command: sh -c "npx prisma migrate deploy && node dist/server.js"
+
+  # Durable-queue sync worker. Scale horizontally with:
+  #   docker compose up --scale worker=3
+  # Each worker registers a unique id (host-pid-rand), claims jobs atomically
+  # (no duplicate processing), heartbeats, and recovers peers' stalled jobs.
+  worker:
+    build: .
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+    command: node dist/workers/sync.worker.js
+    # Graceful shutdown: finish in-flight jobs before exit (default 10s is short;
+    # raise for long jobs so deploys don't interrupt active work).
+    stop_grace_period: 60s
+    deploy:
+      replicas: 1
+
+volumes:
+  pgdata:

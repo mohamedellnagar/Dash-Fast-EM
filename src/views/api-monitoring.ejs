@@ -1,0 +1,35 @@
+<%- include('partials/head') %>
+<%- include('partials/nav') %>
+
+<div class="kpis">
+  <div class="kpi info"><div class="label">Total API Calls</div><div class="value"><%= stats.total %></div></div>
+  <div class="kpi err"><div class="label">Failures</div><div class="value"><%= stats.failures %></div></div>
+  <div class="kpi"><div class="label">Avg Response Time</div><div class="value"><%= stats.avgMs %><span style="font-size:13px"> ms</span></div></div>
+</div>
+
+<div class="panel">
+  <h2>Recent FastTest API Requests</h2>
+  <table>
+    <thead><tr>
+      <th>Workspace</th><th>Endpoint</th><th>Method</th><th>Requested</th><th>Resp (ms)</th><th>HTTP</th><th>Error Code</th><th>Result</th><th>Correlation</th>
+    </tr></thead>
+    <tbody>
+      <% logs.forEach(function(l){ %>
+        <tr>
+          <td><%= l.workspace && l.workspace.workspaceName || '—' %></td>
+          <td class="mono"><%= l.endpoint %></td>
+          <td><%= l.method %></td>
+          <td class="muted"><%= new Date(l.requestedAt).toLocaleTimeString() %></td>
+          <td><%= l.responseTimeMs != null ? l.responseTimeMs : '—' %></td>
+          <td><%= l.httpStatus != null ? l.httpStatus : '—' %></td>
+          <td class="mono"><%= l.fastTestErrorCode || '' %></td>
+          <td><span class="status <%= l.success ? 'OK':'ERROR' %>"><%= l.success ? 'OK':'FAIL' %></span></td>
+          <td class="mono muted"><%= (l.correlationId||'').slice(0,8) %></td>
+        </tr>
+      <% }); %>
+      <% if (logs.length===0){ %><tr><td colspan="9" class="muted">No API calls logged yet.</td></tr><% } %>
+    </tbody>
+  </table>
+</div>
+
+<%- include('partials/foot') %>

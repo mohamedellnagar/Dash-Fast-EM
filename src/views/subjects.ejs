@@ -1,0 +1,45 @@
+<%- include('partials/head') %>
+<%- include('partials/nav') %>
+
+<div class="panel">
+  <h2>Subjects</h2>
+  <table>
+    <thead><tr><th>Subject</th><th>Total</th><th>Not Started</th><th>In Progress</th><th>Completed</th><th>Completion</th><th>Avg Duration</th><th>Avg Raw</th><th>Avg Scaled</th><th>Correct/Incorrect/Skipped</th><th></th></tr></thead>
+    <tbody>
+      <% subjectsTable.forEach(function(s){ %>
+        <tr>
+          <td><%= s.examSubject %></td><td><%= s.total %></td><td><%= s.NOT_STARTED %></td><td><%= s.IN_PROGRESS %></td><td><%= s.COMPLETED %></td>
+          <td><div class="bar"><span style="width:<%= s.completionRate %>%"></span></div><span class="muted"><%= s.completionRate %>%</span></td>
+          <td><%= s.avgTimeUsed===null?'—':Math.round(s.avgTimeUsed/60)+'m' %></td>
+          <td><%= s.avgRawScore===null?'—':s.avgRawScore %></td><td><%= s.avgScaledScore===null?'—':s.avgScaledScore %></td>
+          <td class="mono"><%= s.correct %>/<%= s.incorrect %>/<%= s.skipped %></td>
+          <td><a class="btn secondary sm" href="/subjects/<%= encodeURIComponent(s.examSubject) %>">Open</a></td>
+        </tr>
+      <% }); %>
+      <% if (subjectsTable.length===0){ %><tr><td colspan="11" class="empty">No subject data. Import registrations to begin.</td></tr><% } %>
+    </tbody>
+  </table>
+</div>
+
+<div class="panel">
+  <h2>Workspace Health</h2>
+  <table>
+    <thead><tr><th>Workspace</th><th>Subject</th><th>Connection</th><th>Last Auth</th><th>Last Successful Sync</th><th>Avg Response</th><th>API Success</th><th>Stale Data</th></tr></thead>
+    <tbody>
+      <% workspaces.forEach(function(w){ %>
+        <tr>
+          <td><%= w.workspaceName %></td><td><%= w.subjectCode %></td>
+          <td><span class="status <%= w.connectionStatus==='SUCCESS'?'OK':(w.connectionStatus==='FAILED'?'ERROR':'PENDING') %>"><%= w.connectionStatus %></span></td>
+          <td class="muted"><%= w.lastAuthenticationAt ? new Date(w.lastAuthenticationAt).toLocaleString() : 'never' %></td>
+          <td class="muted"><%= w.lastSuccessfulSyncAt ? new Date(w.lastSuccessfulSyncAt).toLocaleString() : 'never' %></td>
+          <td><%= w.avgResponseTimeMs %> ms</td><td><%= w.apiSuccessRate %>%</td>
+          <td><% if(w.staleDataCount>0){ %><span class="sev-MEDIUM"><%= w.staleDataCount %></span><% } else { %>0<% } %></td>
+        </tr>
+      <% }); %>
+      <% if (workspaces.length===0){ %><tr><td colspan="8" class="empty">No workspaces</td></tr><% } %>
+    </tbody>
+  </table>
+  <p class="muted" style="margin-top:8px">Secrets are never displayed. Manage credentials in Integration Settings.</p>
+</div>
+
+<%- include('partials/foot') %>
