@@ -1,5 +1,7 @@
 # ---- Build stage ----
 FROM node:20-alpine AS build
+# OpenSSL is required for Prisma to pick the correct query engine on Alpine.
+RUN apk add --no-cache openssl
 WORKDIR /app
 COPY package*.json ./
 RUN npm ci
@@ -12,6 +14,8 @@ RUN npm run build
 # ---- Runtime stage ----
 FROM node:20-alpine AS runtime
 ENV NODE_ENV=production
+# OpenSSL so Prisma detects the right engine at runtime (no runtime download).
+RUN apk add --no-cache openssl
 WORKDIR /app
 # Non-root user for security.
 RUN addgroup -S app && adduser -S app -G app
@@ -23,6 +27,8 @@ COPY --from=build /app/dist ./dist
 COPY prisma ./prisma
 COPY docker-entrypoint.sh ./docker-entrypoint.sh
 RUN chmod +x ./docker-entrypoint.sh
+# Let the non-root user write Prisma engines if the CLI ever needs to (belt-and-suspenders).
+RUN chown -R app:app /app/node_modules/@prisma /app/node_modules/.prisma /app/node_modules/prisma 2>/dev/null || true
 USER app
 EXPOSE 3000
 # The entrypoint runs `prisma migrate deploy` then execs the command below.

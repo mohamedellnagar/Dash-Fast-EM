@@ -12,7 +12,11 @@
 //   * All money/score numerics use Float.
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  // Bundle the Alpine (musl + OpenSSL 3) query engine at build time so the
+  // container never tries to download an engine at runtime (which fails as a
+  // non-root user). "native" keeps local dev working.
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
 }
 
 datasource db {
