@@ -3,7 +3,7 @@ import { retryOnDeadlock } from '../../db/retry';
 import { env } from '../../config/env';
 import { DASHBOARD_STATUS, JOB_TYPE, JOB_PRIORITY } from '../../lib/enums';
 import { nextSyncDelaySeconds, shouldFetchResults } from './policy';
-import { enqueue, syncAllowedNow, pausedSubjects, pausedAcademicYears } from './queue.service';
+import { enqueue, syncAllowedNow, pausedSubjects, pausedAcademicYears, getSyncMode } from './queue.service';
 
 export interface Scheduling {
   nextSyncAt: Date;
@@ -24,6 +24,7 @@ interface RegForSchedule {
   lastSuccessfulSyncAt: Date | null;
   nextSyncAt: Date | null;
   hasResults: boolean;
+  unchangedPolls?: number;
 }
 
 export function isActiveExamWindow(reg: { startDate: string | null; endDate: string | null }, nowMs: number): boolean {
@@ -46,7 +47,7 @@ const PRIORITY_BY_STATUS: Record<string, number> = {
 /** Compute scheduling + stale metadata for a registration. */
 export function computeScheduling(reg: RegForSchedule, nowMs: number): Scheduling {
   const active = isActiveExamWindow(reg, nowMs);
-  const delaySec = nextSyncDelaySeconds(reg.dashboardStatus, active);
+  const delaySec = nextSyncDelaySeconds(reg.dashboardStatus, active, reg.unchangedPolls ?? 0);
 
   const completedWithResults = reg.dashboardStatus === DASHBOARD_STATUS.COMPLETED && reg.hasResults;
   const requiresStatusFetch = !completedWithResults; // stop frequent polling once completed+results
@@ -107,25 +108,38 @@ export async function enqueueDueJobs(now: () => number = () => Date.now(), limit
   // Respect the global on/off switch and time window — don't pile up jobs while paused.
   if (!(await syncAllowedNow(now))) return { enqueued: 0, deduped: 0 };
   const nowDate = new Date(now());
-  const [pausedSubs, pausedYears] = await Promise.all([pausedSubjects(), pausedAcademicYears()]);
-  const due = await prisma.examRegistration.findMany({
-    where: {
-      deletedAt: null,
-      workspaceId: { not: null },
-      workspace: { is: { syncEnabled: true, isActive: true, syncPaused: false, deletedAt: null } },
-      syncState: { notIn: ['MANUAL_REVIEW'] },
-      ...(pausedSubs.length ? { examSubject: { notIn: pausedSubs } } : {}),
-      ...(pausedYears.length ? { academicYear: { notIn: pausedYears } } : {}),
-      OR: [{ nextSyncAt: null }, { nextSyncAt: { lte: nowDate } }],
-    },
-    orderBy: [{ syncPriority: 'asc' }, { nextSyncAt: 'asc' }],
-    take: limit,
-    select: {
-      id: true, workspaceId: true, examName: true, schoolId: true, testCodeNormalized: true,
-      dashboardStatus: true, startDate: true, endDate: true, lastSuccessfulSyncAt: true, nextSyncAt: true,
-      _count: { select: { results: true } },
-    },
-  });
+  const [pausedSubs, pausedYears, mode] = await Promise.all([pausedSubjects(), pausedAcademicYears(), getSyncMode()]);
+
+  const baseWhere = {
+    deletedAt: null,
+    workspaceId: { not: null },
+    workspace: { is: { syncEnabled: true, isActive: true, syncPaused: false, deletedAt: null } },
+    syncState: { notIn: ['MANUAL_REVIEW'] },
+    ...(pausedSubs.length ? { examSubject: { notIn: pausedSubs } } : {}),
+    ...(pausedYears.length ? { academicYear: { notIn: pausedYears } } : {}),
+  };
+  const select = {
+    id: true, workspaceId: true, examName: true, schoolId: true, testCodeNormalized: true,
+    dashboardStatus: true, startDate: true, endDate: true, lastSuccessfulSyncAt: true, nextSyncAt: true, unchangedPolls: true,
+    _count: { select: { results: true } },
+  } as const;
+
+  // SWEEP: round-robin over every NON-TERMINAL code (skip COMPLETED-with-results),
+  // oldest-checked first — a continuous sequential sweep ignoring nextSyncAt.
+  // ADAPTIVE (default): due by nextSyncAt, highest priority first.
+  const due = mode === 'SWEEP'
+    ? await prisma.examRegistration.findMany({
+        where: { ...baseWhere, NOT: { AND: [{ dashboardStatus: DASHBOARD_STATUS.COMPLETED }, { results: { some: {} } }] } },
+        orderBy: [{ lastSyncAt: { sort: 'asc', nulls: 'first' } }],
+        take: limit,
+        select,
+      })
+    : await prisma.examRegistration.findMany({
+        where: { ...baseWhere, OR: [{ nextSyncAt: null }, { nextSyncAt: { lte: nowDate } }] },
+        orderBy: [{ syncPriority: 'asc' }, { nextSyncAt: 'asc' }],
+        take: limit,
+        select,
+      });
 
   let enqueued = 0;
   let deduped = 0;
@@ -179,7 +193,7 @@ export async function refreshStaleFlags(now: () => number = () => Date.now(), li
   const regs = await prisma.examRegistration.findMany({
     where: { deletedAt: null },
     select: {
-      id: true, dashboardStatus: true, startDate: true, endDate: true, lastSuccessfulSyncAt: true, nextSyncAt: true,
+      id: true, dashboardStatus: true, startDate: true, endDate: true, lastSuccessfulSyncAt: true, nextSyncAt: true, unchangedPolls: true,
       isStale: true, staleSince: true, _count: { select: { results: true } },
     },
     take: limit,

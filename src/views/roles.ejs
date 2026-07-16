@@ -1,0 +1,89 @@
+<%- include('partials/head') %>
+<%- include('partials/nav') %>
+
+<style>
+  .role-badge{display:inline-block;border-radius:20px;padding:2px 9px;font-size:11px;font-weight:600}
+  .role-ADMINISTRATOR{background:#818cf822;border:1px solid #818cf855;color:#c7d2fe}
+  .role-OPERATIONS{background:#38bdf822;border:1px solid #38bdf855;color:#bae6fd}
+  .role-ASSESSMENT_TEAM{background:#22c55e22;border:1px solid #22c55e55;color:#bbf7d0}
+  .role-SCHOOL_USER{background:#f59e0b22;border:1px solid #f59e0b55;color:#fde68a}
+  .role-VIEWER{background:#64748b22;border:1px solid #64748b55;color:#cbd5e1}
+  .role-card{border:1px solid var(--line);border-radius:12px;padding:16px 18px;margin-bottom:14px;background:var(--surface)}
+  .role-head{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+  .role-head .nm{font-weight:700;font-size:16px}
+  .perm-group{margin:10px 0}
+  .perm-group .gt{font-size:11px;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);font-weight:700;margin-bottom:6px}
+  .perm-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:6px}
+  .perm-grid label{display:flex;align-items:center;gap:8px;background:var(--panel-2);border:1px solid var(--line);border-radius:7px;padding:6px 9px;font-size:12px;cursor:pointer;font-family:ui-monospace,Menlo,monospace}
+  .muted-sm{font-size:12px;color:var(--muted)}
+  .locked-note{background:#818cf818;border:1px solid #818cf844;border-radius:8px;padding:10px 12px;color:#c7d2fe;font-size:13px}
+  summary{cursor:pointer;list-style:none}
+</style>
+
+<% if (msg) { %><div class="alert ok"><%= msg %></div><% } %>
+<% if (err) { %><div class="alert"><%= err %></div><% } %>
+
+<div class="panel">
+  <h2 style="margin-top:0">🔐 Roles &amp; Permissions</h2>
+  <p class="muted-sm" style="margin-top:-6px">عدّل صلاحيات كل دور أو أضف دور جديد. التعديل بياخد أثره على المستخدم في أول طلب بعد الحفظ. الأدمن دايماً full access.</p>
+
+  <% roles.forEach(function(r){ %>
+    <div class="role-card">
+      <div class="role-head">
+        <span class="role-badge role-<%= r.key %>"><%= r.key %></span>
+        <span class="nm"><%= r.name %></span>
+        <span class="muted-sm"><%= r.userCount %> user(s) · <%= r.locked ? 'full access' : r.permissionKeys.length + ' permissions' %></span>
+        <% if (r.builtIn) { %><span class="muted-sm">· built-in</span><% } %>
+        <div style="margin-left:auto;display:flex;gap:8px">
+          <% if (!r.builtIn && r.userCount === 0) { %>
+          <form method="post" action="/admin/roles/<%= r.id %>/delete" style="margin:0"><button class="btn secondary sm del-role" type="button" style="color:var(--err)">🗑 Delete</button></form>
+          <% } %>
+        </div>
+      </div>
+
+      <% if (r.locked) { %>
+        <div class="locked-note" style="margin-top:12px">🔒 دور الأدمن دايماً عنده كل الصلاحيات ومايتعدّلش (حماية من قفل النظام على نفسه).</div>
+      <% } else { %>
+        <details style="margin-top:10px">
+          <summary class="btn secondary sm" style="display:inline-block">Edit permissions ▾</summary>
+          <form method="post" action="/admin/roles/<%= r.id %>/permissions" style="margin-top:12px">
+            <% Object.keys(groups).forEach(function(g){ %>
+              <div class="perm-group">
+                <div class="gt"><%= g %></div>
+                <div class="perm-grid">
+                  <% groups[g].forEach(function(p){ %>
+                    <label><input type="checkbox" name="permissionKeys" value="<%= p %>" <%= r.permissionKeys.indexOf(p)>=0 ? 'checked' : '' %>> <%= p %></label>
+                  <% }); %>
+                </div>
+              </div>
+            <% }); %>
+            <button class="btn sm" type="submit" style="margin-top:8px">Save permissions</button>
+          </form>
+        </details>
+      <% } %>
+    </div>
+  <% }); %>
+</div>
+
+<div class="panel">
+  <h2 style="margin-top:0">➕ Add Role</h2>
+  <form method="post" action="/admin/roles">
+    <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end">
+      <label>Key <span class="muted-sm">(A-Z, _)</span><br><input name="key" required placeholder="e.g. DATA_ANALYST" style="min-width:180px"></label>
+      <label>Name<br><input name="name" required placeholder="e.g. Data Analyst" style="min-width:200px"></label>
+      <label>Description<br><input name="description" placeholder="optional" style="min-width:240px"></label>
+      <button class="btn" type="submit">Create role</button>
+    </div>
+    <div class="muted-sm" style="margin-top:6px">بعد الإنشاء، افتح الدور وحدّد صلاحياته.</div>
+  </form>
+</div>
+
+<script>
+(function(){
+  document.querySelectorAll('.del-role').forEach(function(b){
+    b.addEventListener('click', function(){ if (confirm('Delete this role? (only allowed when no users are assigned)')) b.closest('form').submit(); });
+  });
+})();
+</script>
+
+<%- include('partials/foot') %>

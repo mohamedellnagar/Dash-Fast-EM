@@ -12,11 +12,19 @@ export const POLL_INTERVALS_SECONDS = {
   UNKNOWN: 600,
 } as const;
 
-/**
- * Compute the next poll time for a registration given its normalized status
- * and whether the exam window is currently active.
- */
-export function nextSyncDelaySeconds(dashboardStatus: string, inActiveWindow: boolean): number {
+// Adaptive-backoff ceilings (seconds) per status: how far the interval may grow
+// when the status keeps coming back unchanged. Kept modest so we still catch a
+// transition reasonably fast even without knowing the exam schedule.
+export const MAX_POLL_INTERVALS_SECONDS: Record<string, number> = {
+  [DASHBOARD_STATUS.NOT_STARTED]: 1800, // cap 30 min — stay responsive to a start
+  [DASHBOARD_STATUS.IN_PROGRESS]: 3600, // cap 60 min
+  [DASHBOARD_STATUS.UNDER_REVIEW]: 1800,
+  [DASHBOARD_STATUS.REVIEW_FAILED]: 3600,
+  [DASHBOARD_STATUS.UNKNOWN]: 3600,
+};
+const BACKOFF_BASE = 1.5;
+
+function baseDelaySeconds(dashboardStatus: string, inActiveWindow: boolean): number {
   switch (dashboardStatus) {
     case DASHBOARD_STATUS.NOT_STARTED:
       return inActiveWindow
@@ -33,6 +41,31 @@ export function nextSyncDelaySeconds(dashboardStatus: string, inActiveWindow: bo
     default:
       return POLL_INTERVALS_SECONDS.UNKNOWN;
   }
+}
+
+/**
+ * Compute the next poll delay for a registration given its normalized status,
+ * whether the exam window is active, and how many consecutive polls have already
+ * returned the SAME status (unchangedPolls). Adaptive backoff: the interval grows
+ * by 1.5x per unchanged poll, capped per status. A status change resets
+ * unchangedPolls to 0 (caller), snapping the cadence back to the base interval.
+ */
+export function nextSyncDelaySeconds(dashboardStatus: string, inActiveWindow: boolean, unchangedPolls = 0): number {
+  const base = baseDelaySeconds(dashboardStatus, inActiveWindow);
+  const cap = MAX_POLL_INTERVALS_SECONDS[dashboardStatus];
+  if (!cap || unchangedPolls <= 0) return base;
+  const grown = Math.round(base * Math.pow(BACKOFF_BASE, unchangedPolls));
+  return Math.min(cap, grown);
+}
+
+/**
+ * Spread a computed delay by up to +15% (max +5 min) of random jitter so that a
+ * batch of registrations synced together drift apart over time instead of all
+ * becoming due again at the same instant (thundering-herd de-synchronization).
+ */
+export function applyJitter(delaySeconds: number, rng: () => number = Math.random): number {
+  const spread = Math.min(delaySeconds * 0.15, 300);
+  return Math.round(delaySeconds + rng() * spread);
 }
 
 // Retry backoff schedule (seconds): attempt 1 immediate, then 30s, then 120s.

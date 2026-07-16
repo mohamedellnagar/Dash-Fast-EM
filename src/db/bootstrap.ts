@@ -27,17 +27,24 @@ export async function ensureBootstrap(): Promise<void> {
       await prisma.permission.upsert({ where: { key }, create: { key }, update: {} });
     }
 
-    // 2. Roles + grants (source of truth = ROLE_PERMISSIONS)
+    // 2. Roles + grants. ROLE_PERMISSIONS is the FIRST-RUN seed only — once a role
+    //    has grants they are admin-managed (edited in the UI) and preserved across
+    //    restarts. EXCEPTION: the Administrator role is always re-asserted to full
+    //    access so nobody can accidentally lock the platform out of itself.
     for (const [key, perms] of Object.entries(ROLE_PERMISSIONS)) {
       const role = await prisma.role.upsert({
         where: { key },
         create: { key, name: ROLE_NAMES[key] ?? key },
         update: { name: ROLE_NAMES[key] ?? key },
       });
-      await prisma.rolePermission.deleteMany({ where: { roleId: role.id } });
-      for (const p of perms) {
-        const perm = await prisma.permission.findUnique({ where: { key: p } });
-        if (perm) await prisma.rolePermission.create({ data: { roleId: role.id, permissionId: perm.id } });
+      const existingGrants = await prisma.rolePermission.count({ where: { roleId: role.id } });
+      const isAdmin = key === ROLE.ADMINISTRATOR;
+      if (isAdmin || existingGrants === 0) {
+        await prisma.rolePermission.deleteMany({ where: { roleId: role.id } });
+        for (const p of perms) {
+          const perm = await prisma.permission.findUnique({ where: { key: p } });
+          if (perm) await prisma.rolePermission.create({ data: { roleId: role.id, permissionId: perm.id } });
+        }
       }
     }
 

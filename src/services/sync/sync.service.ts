@@ -4,7 +4,7 @@ import { logger } from '../../lib/logger';
 import { FastTestApiError, FastTestClient, fastTestClient } from '../fasttest/client';
 import { parseResults } from '../fasttest/results-mapper';
 import { getWorkspaceById, resolveWorkspaceBySubject, ResolvedWorkspace } from '../workspace.service';
-import { isPermanentError, nextSyncDelaySeconds, retryDelaySeconds, shouldFetchResults } from './policy';
+import { applyJitter, isPermanentError, nextSyncDelaySeconds, retryDelaySeconds, shouldFetchResults } from './policy';
 
 export interface SyncResult {
   ok: boolean;
@@ -53,8 +53,9 @@ export async function syncRegistration(
   }
 
   try {
-    const { dashboardStatus } = await fetchAndPersistStatus(reg, ws, client, now);
-    const delay = nextSyncDelaySeconds(dashboardStatus, inActiveWindow(reg, now()));
+    const { dashboardStatus, unchangedPolls } = await fetchAndPersistStatus(reg, ws, client, now);
+    // Adaptive backoff (unchangedPolls) + jitter to de-synchronize the herd.
+    const delay = applyJitter(nextSyncDelaySeconds(dashboardStatus, inActiveWindow(reg, now()), unchangedPolls));
     await prisma.examRegistration.update({ where: { id: registrationId }, data: { nextSyncAt: new Date(now() + delay * 1000) } });
 
     // Fetch results once for terminal-ish statuses.
@@ -88,6 +89,8 @@ interface RegDims {
 interface RegStatusRow {
   id: string;
   testCodeNormalized: string;
+  dashboardStatus: string; // previous status — compared to detect a change
+  unchangedPolls: number; // running count of consecutive unchanged polls
   fastTestTestId: string | null;
   fastTestTestName: string | null;
   fastTestExamineeId: string | null;
@@ -105,11 +108,13 @@ export async function fetchAndPersistStatus(
   ws: ResolvedWorkspace,
   client: FastTestClient = fastTestClient,
   now: () => number = () => Date.now(),
-): Promise<{ dashboardStatus: string; rawStatus: string }> {
+): Promise<{ dashboardStatus: string; rawStatus: string; unchangedPolls: number }> {
   const registrationId = reg.id;
   const status = await client.getStatus(ws, reg.testCodeNormalized);
   const rawStatus = (status.status ?? '').toString();
   const dashboardStatus = toDashboardStatus(rawStatus);
+  // Adaptive-backoff counter: same status as last time → grow; changed → reset.
+  const unchangedPolls = dashboardStatus === reg.dashboardStatus ? (reg.unchangedPolls ?? 0) + 1 : 0;
 
   await prisma.fastTestStatusSnapshot.create({
     data: {
@@ -140,10 +145,11 @@ export async function fetchAndPersistStatus(
       syncStatus: SYNC_STATUS.OK,
       syncError: null,
       syncRetryCount: 0,
+      unchangedPolls,
     },
   });
   await prisma.fastTestWorkspace.update({ where: { id: ws.workspaceId }, data: { lastSuccessfulSyncAt: new Date(now()) } }).catch(() => {});
-  return { dashboardStatus, rawStatus };
+  return { dashboardStatus, rawStatus, unchangedPolls };
 }
 
 /** Public single-attempt results fetch (throws on API failure). */

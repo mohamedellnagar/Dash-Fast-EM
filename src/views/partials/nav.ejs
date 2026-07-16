@@ -64,6 +64,8 @@
 
       <% if (showAdmin) { %>
         <div class="nav-group">Admin</div>
+        <% if (can('user:manage')) { %><a href="/admin/users" class="<%= nav==='users'?'active':'' %>">👥 Users &amp; Access</a><% } %>
+        <% if (can('user:manage')) { %><a href="/admin/roles" class="<%= nav==='roles'?'active':'' %>">🔐 Roles &amp; Permissions</a><% } %>
         <% if (can('integration:manage')) { %><a href="/admin/integration" class="<%= nav==='integration'?'active':'' %>">🔌 Integration Settings</a><% } %>
         <% if (can('apimonitoring:view')) { %><a href="/admin/api-monitoring" class="<%= nav==='api-monitoring'?'active':'' %>">📡 API Monitoring</a><% } %>
         <% if (can('audit:view')) { %><a href="/admin/audit" class="<%= nav==='audit'?'active':'' %>">📝 Audit Log</a><% } %>

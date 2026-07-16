@@ -1,0 +1,148 @@
+<%- include('partials/head') %>
+<%- include('partials/nav') %>
+
+<style>
+  .role-badge{display:inline-block;background:var(--panel-2);border:1px solid var(--line);border-radius:20px;padding:2px 9px;font-size:11px;font-weight:600;margin:1px}
+  .role-ADMINISTRATOR{background:#818cf822;border-color:#818cf855;color:#c7d2fe}
+  .role-OPERATIONS{background:#38bdf822;border-color:#38bdf855;color:#bae6fd}
+  .role-ASSESSMENT_TEAM{background:#22c55e22;border-color:#22c55e55;color:#bbf7d0}
+  .role-SCHOOL_USER{background:#f59e0b22;border-color:#f59e0b55;color:#fde68a}
+  .role-VIEWER{background:#64748b22;border-color:#64748b55;color:#cbd5e1}
+  .roles-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:8px;margin:8px 0}
+  .roles-grid label{display:flex;align-items:center;gap:8px;background:var(--panel-2);border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:13px;cursor:pointer}
+  .u-edit{background:var(--panel-2);border:1px solid var(--line);border-radius:10px;padding:14px;margin-top:8px}
+  .u-edit form{margin:0}
+  .field-row{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end;margin-bottom:10px}
+  .pill-off{color:var(--err)} .pill-on{color:var(--ok)}
+  table.u td{vertical-align:top}
+  .scope-select{min-width:220px;max-width:340px;min-height:90px}
+  .muted-sm{font-size:12px;color:var(--muted)}
+</style>
+
+<% if (msg) { %><div class="alert ok"><%= msg %></div><% } %>
+<% if (err) { %><div class="alert"><%= err %></div><% } %>
+
+<!-- Create user -->
+<div class="panel">
+  <h2>➕ Add User</h2>
+  <form method="post" action="/admin/users">
+    <div class="field-row">
+      <label>Full name<br><input name="fullName" required style="min-width:200px" placeholder="e.g. Ahmed Ali"></label>
+      <label>Email<br><input name="email" type="email" required style="min-width:240px" placeholder="name@moe.gov.ae"></label>
+      <label>Password<br><input name="password" type="text" required minlength="8" style="min-width:200px" placeholder="8+ characters"></label>
+    </div>
+    <div class="muted-sm" style="margin-bottom:4px">Roles</div>
+    <div class="roles-grid">
+      <% roles.forEach(function(r){ %>
+        <label><input type="checkbox" name="roleKeys" value="<%= r.key %>"> <%= r.name %> <span class="muted-sm">(<%= r.permissionCount %> perms)</span></label>
+      <% }); %>
+    </div>
+    <button class="btn" type="submit">Create user</button>
+  </form>
+</div>
+
+<!-- Users table -->
+<div class="panel">
+  <h2>👥 Users <span class="muted-sm">(<%= users.length %>)</span></h2>
+  <table class="u">
+    <thead><tr><th>User</th><th>Roles</th><th>Status</th><th>Last login</th><th style="width:1%"></th></tr></thead>
+    <tbody>
+    <% users.forEach(function(u){ %>
+      <tr>
+        <td>
+          <div style="font-weight:600"><%= u.fullName %><% if (u.id === currentUserId) { %> <span class="muted-sm">(you)</span><% } %></div>
+          <div class="muted-sm mono"><%= u.email %></div>
+        </td>
+        <td>
+          <% if (u.roleKeys.length) { u.roleKeys.forEach(function(k){ %><span class="role-badge role-<%= k %>"><%= k %></span><% }); } else { %><span class="muted-sm">— no roles —</span><% } %>
+          <% if (u.schoolScopeCount) { %><div class="muted-sm">🏫 <%= u.schoolScopeCount %> school(s) scoped</div><% } %>
+        </td>
+        <td><span class="<%= u.isActive ? 'pill-on' : 'pill-off' %>" style="font-weight:700"><%= u.isActive ? '● Active' : '○ Inactive' %></span></td>
+        <td class="muted-sm"><%= u.lastLoginAt ? new Date(u.lastLoginAt).toLocaleString('en-GB') : 'never' %></td>
+        <td style="white-space:nowrap">
+          <details>
+            <summary class="btn secondary sm" style="list-style:none;display:inline-block">Manage ▾</summary>
+            <div class="u-edit">
+              <!-- Roles + school scope -->
+              <form method="post" action="/admin/users/<%= u.id %>/access">
+                <div class="muted-sm">Roles</div>
+                <div class="roles-grid">
+                  <% roles.forEach(function(r){ %>
+                    <label><input type="checkbox" name="roleKeys" value="<%= r.key %>" <%= u.roleKeys.indexOf(r.key)>=0 ? 'checked' : '' %>> <%= r.name %></label>
+                  <% }); %>
+                </div>
+                <div class="field-row" style="align-items:flex-start">
+                  <label>School scope <span class="muted-sm">(for School User role — hold ⌘/Ctrl to multi-select)</span><br>
+                    <select name="schoolIds" multiple class="scope-select">
+                      <% schools.forEach(function(s){ %><option value="<%= s.id %>" <%= u.schoolIds.indexOf(s.id)>=0 ? 'selected' : '' %>><%= s.name %></option><% }); %>
+                    </select>
+                  </label>
+                </div>
+                <button class="btn sm" type="submit">Save roles &amp; scope</button>
+              </form>
+
+              <div style="display:flex;gap:20px;flex-wrap:wrap;margin-top:14px;border-top:1px solid var(--line);padding-top:12px">
+                <!-- rename -->
+                <form method="post" action="/admin/users/<%= u.id %>/profile">
+                  <div class="muted-sm">Rename</div>
+                  <input name="fullName" value="<%= u.fullName %>" style="min-width:180px">
+                  <button class="btn secondary sm" type="submit">Save</button>
+                </form>
+                <!-- reset password -->
+                <form method="post" action="/admin/users/<%= u.id %>/password">
+                  <div class="muted-sm">Reset password</div>
+                  <input name="password" type="text" minlength="8" placeholder="new password (8+)" style="min-width:180px" required>
+                  <button class="btn secondary sm" type="submit">Reset</button>
+                </form>
+                <!-- activate/deactivate -->
+                <form method="post" action="/admin/users/<%= u.id %>/active">
+                  <div class="muted-sm">Status</div>
+                  <input type="hidden" name="active" value="<%= u.isActive ? 'false' : 'true' %>">
+                  <button class="btn secondary sm" type="submit"><%= u.isActive ? '⏸ Deactivate' : '▶ Activate' %></button>
+                </form>
+                <!-- delete -->
+                <% if (u.id !== currentUserId) { %>
+                <form method="post" action="/admin/users/<%= u.id %>/delete">
+                  <div class="muted-sm">Remove</div>
+                  <button class="btn secondary sm del-user" type="button" data-uid="<%= u.id %>" style="color:var(--err)">🗑 Delete</button>
+                </form>
+                <% } %>
+              </div>
+            </div>
+          </details>
+        </td>
+      </tr>
+    <% }); %>
+    </tbody>
+  </table>
+</div>
+
+<!-- Roles reference -->
+<div class="panel">
+  <h2>🔐 Roles &amp; Permissions <span class="muted-sm">(reference — defined in code)</span></h2>
+  <table>
+    <thead><tr><th>Role</th><th>Users</th><th>Permissions</th></tr></thead>
+    <tbody>
+      <% roles.forEach(function(r){ %>
+      <tr>
+        <td><span class="role-badge role-<%= r.key %>"><%= r.name %></span></td>
+        <td><%= r.userCount %></td>
+        <td class="muted-sm"><%= r.permissionCount %> permissions<% if (r.key !== 'ADMINISTRATOR') { %> · <span class="mono" style="font-size:11px"><%= r.permissions.slice(0,6).join(', ') %><%= r.permissions.length>6 ? ' …' : '' %></span><% } else { %> · <b>full access</b><% } %></td>
+      </tr>
+      <% }); %>
+    </tbody>
+  </table>
+</div>
+
+<script>
+(function(){
+  // Delete needs a real confirm (CSP blocks inline onsubmit); submit the form on confirm.
+  document.querySelectorAll('.del-user').forEach(function(b){
+    b.addEventListener('click', function(){
+      if (confirm('Remove this user? They will lose access immediately (soft delete, recoverable in the DB).')) b.closest('form').submit();
+    });
+  });
+})();
+</script>
+
+<%- include('partials/foot') %>

@@ -60,6 +60,13 @@
       </button>
     </span>
     <span style="border-left:1px solid #ccc;padding-left:14px">
+      Strategy: <strong style="color:<%= controlState.syncMode === 'SWEEP' ? '#38bdf8' : '#94a3b8' %>"><%= controlState.syncMode === 'SWEEP' ? '🔁 Sequential Sweep' : '⚙️ Adaptive (per-status)' %></strong>
+      <button class="btn secondary sm" id="toggleMode" data-mode="<%= controlState.syncMode %>">
+        <%= controlState.syncMode === 'SWEEP' ? 'Switch to Adaptive' : 'Switch to Sweep 🔁' %>
+      </button>
+      <div class="muted-sm" style="font-size:11px;margin-top:2px"><%= controlState.syncMode === 'SWEEP' ? 'يمشي على كل كود غير مكتمل بالترتيب ويلفّ باستمرار' : 'فترات حسب الحالة + backoff تكيّفي' %></div>
+    </span>
+    <span style="border-left:1px solid #ccc;padding-left:14px">
       Daily window (server hour 0–23):
       <input type="number" id="winStart" min="0" max="23" style="width:56px" value="<%= controlState.windowStart == null ? '' : controlState.windowStart %>" placeholder="start">
       →
@@ -194,6 +201,10 @@ var tg = document.getElementById('toggleGlobal');
 if(tg) tg.onclick = async function(){ var turnOff = tg.dataset.paused!=='true'; await post('/api/queue/global/pause', {paused: turnOff}); location.reload(); };
 var tf = document.getElementById('toggleFast');
 if(tf) tf.onclick = async function(){ var enable = tf.dataset.fast!=='true'; if(enable && !confirm('Enable FAST sync (~20 req/s)? This replaces the normal conservative rate.')) return; await post('/api/queue/fast-mode', {enabled: enable}); location.reload(); };
+var tm = document.getElementById('toggleMode');
+if(tm) tm.onclick = async function(){ var next = tm.dataset.mode==='SWEEP' ? 'ADAPTIVE' : 'SWEEP';
+  if(next==='SWEEP' && !confirm('التبديل للمسح الدوري (Sweep)؟ هيمشي على كل كود غير مكتمل بالترتيب ويلفّ باستمرار (بيتجاهل الفترات التكيّفية).')) return;
+  await post('/api/queue/sync-mode', {mode: next}); location.reload(); };
 var sw = document.getElementById('setWindow');
 if(sw) sw.onclick = async function(){
   var s = document.getElementById('winStart').value, e = document.getElementById('winEnd').value;

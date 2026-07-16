@@ -4,6 +4,7 @@ import { computeScheduling, enqueueDueJobs, isActiveExamWindow } from '../../src
 import { POLL_INTERVALS_SECONDS } from '../../src/services/sync/policy';
 import { DASHBOARD_STATUS } from '../../src/lib/enums';
 import { makeRegistration, clearRegistrations } from '../helpers/fixtures';
+import { setSyncMode } from '../../src/services/sync/queue.service';
 
 const NOW = Date.parse('2026-09-03T10:00:00Z');
 
@@ -71,5 +72,23 @@ describe('Scheduler enqueue', () => {
     await makeRegistration({ workspaceId: paused, status: 'IN_PROGRESS', examSubject: 'PausedSub' });
     const r = await enqueueDueJobs(() => Date.now());
     expect(r.enqueued).toBe(0);
+  });
+
+  it('SWEEP mode enqueues every non-terminal code and skips COMPLETED-with-results', async () => {
+    await setSyncMode('SWEEP');
+    try {
+      // Two non-terminal (should be swept) — with a far-future nextSyncAt to prove
+      // SWEEP ignores nextSyncAt gating.
+      const a = await makeRegistration({ workspaceId: wsId, status: 'IN_PROGRESS', examSubject: 'SwSub' });
+      const b = await makeRegistration({ workspaceId: wsId, status: 'NOT_STARTED', examSubject: 'SwSub' });
+      await prisma.examRegistration.updateMany({ where: { id: { in: [a.id, b.id] } }, data: { nextSyncAt: new Date(Date.now() + 1e10) } });
+      // Terminal: COMPLETED + a result row → must be skipped.
+      await makeRegistration({ workspaceId: wsId, status: 'COMPLETED', examSubject: 'SwSub', result: { secondsUsed: 100 } });
+
+      const r = await enqueueDueJobs(() => Date.now());
+      expect(r.enqueued).toBe(2); // the two non-terminal only; terminal skipped
+    } finally {
+      await setSyncMode('ADAPTIVE'); // restore so other tests aren't affected
+    }
   });
 });

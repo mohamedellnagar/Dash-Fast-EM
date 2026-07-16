@@ -304,6 +304,25 @@ export async function isFastMode(): Promise<boolean> {
   return row?.value === 'true';
 }
 
+// --- Sync strategy: ADAPTIVE (per-status intervals + backoff) vs SWEEP
+// (continuous round-robin over every non-terminal code, oldest-checked first). ---
+export type SyncMode = 'ADAPTIVE' | 'SWEEP';
+const SYNC_MODE_KEY = 'sync.mode';
+
+export async function getSyncMode(): Promise<SyncMode> {
+  const row = await prisma.systemSetting.findUnique({ where: { key: SYNC_MODE_KEY } });
+  return row?.value === 'SWEEP' ? 'SWEEP' : 'ADAPTIVE';
+}
+
+export async function setSyncMode(mode: SyncMode, by?: string): Promise<void> {
+  await prisma.systemSetting.upsert({
+    where: { key: SYNC_MODE_KEY },
+    create: { key: SYNC_MODE_KEY, value: mode },
+    update: { value: mode },
+  });
+  void by;
+}
+
 // --- per-subject (ExamSubject) sync control ---
 
 /** Enable/disable sync for a whole ExamSubject. */
@@ -413,14 +432,15 @@ export async function syncAllowedNow(now: () => number = () => Date.now()): Prom
 }
 
 /** Current control state for UI/status. */
-export async function getSyncControlState(): Promise<{ globalPaused: boolean; windowStart: number | null; windowEnd: number | null; allowedNow: boolean; fastMode: boolean; frozen: boolean; connectionTestDisabled: boolean }> {
-  const [global, rows, allowedNow, fastMode, frozen, connectionTestDisabled] = await Promise.all([
+export async function getSyncControlState(): Promise<{ globalPaused: boolean; windowStart: number | null; windowEnd: number | null; allowedNow: boolean; fastMode: boolean; frozen: boolean; connectionTestDisabled: boolean; syncMode: SyncMode }> {
+  const [global, rows, allowedNow, fastMode, frozen, connectionTestDisabled, syncMode] = await Promise.all([
     prisma.queueControl.findFirst({ where: { scope: 'GLOBAL', scopeKey: 'ALL' } }),
     prisma.systemSetting.findMany({ where: { key: { in: [WINDOW_START_KEY, WINDOW_END_KEY] } } }),
     syncAllowedNow(),
     isFastMode(),
     isFastTestFrozen(),
     isConnectionTestDisabled(),
+    getSyncMode(),
   ]);
   const map = new Map(rows.map((r) => [r.key, r.value]));
   const parse = (v?: string) => (v == null || v === '' || Number.isNaN(Number(v)) ? null : Number(v));
@@ -432,6 +452,7 @@ export async function getSyncControlState(): Promise<{ globalPaused: boolean; wi
     fastMode,
     frozen,
     connectionTestDisabled,
+    syncMode,
   };
 }
 

@@ -26,6 +26,7 @@ import { attentionRouter } from './routes/attention.routes';
 import { syncAdminRouter } from './routes/sync-admin.routes';
 import { syncControlRouter } from './routes/sync-control.routes';
 import { verifyRouter } from './routes/verify.routes';
+import { usersRouter } from './routes/users.routes';
 import { metricsRouter } from './routes/metrics.routes';
 
 export function createApp(): Express {
@@ -146,6 +147,7 @@ export function createApp(): Express {
   // Server-rendered pages
   app.use('/', importRouter);
   app.use('/', adminRouter);
+  app.use('/', usersRouter);
   app.use('/', dashboardRouter);
 
   // 404

@@ -7,7 +7,7 @@ import { audit } from '../services/audit.service';
 import {
   queueStats, cancelJob, retryJob, retryFailedJobs, requeueDeadLetter,
   pauseWorkspace, pauseJobType, pauseGlobal, setSyncWindow, getSyncControlState,
-  pauseSubject, getSubjectSyncControls, setFastMode,
+  pauseSubject, getSubjectSyncControls, setFastMode, setSyncMode,
   pauseAcademicYear, getAcademicYearSyncControls,
 } from '../services/sync/queue.service';
 import { setFastTestFrozen, setConnectionTestDisabled } from '../services/fasttest/freeze';
@@ -136,6 +136,15 @@ syncAdminRouter.post('/api/queue/fast-mode', requireAuth, requirePermission(PERM
   if (!p.success) return res.status(400).json({ error: 'enabled (boolean) required' });
   await setFastMode(p.data.paused, req.principal!.email);
   await audit({ ...actor(req), action: p.data.paused ? 'SYNC_FAST_MODE_ON' : 'SYNC_FAST_MODE_OFF' });
+  res.json({ ok: true, ...(await getSyncControlState()) });
+});
+
+// Switch the sync strategy: ADAPTIVE (per-status intervals) vs SWEEP (round-robin).
+syncAdminRouter.post('/api/queue/sync-mode', requireAuth, requirePermission(PERMISSION.QUEUE_MANAGE), async (req, res) => {
+  const mode = req.body?.mode === 'SWEEP' ? 'SWEEP' : req.body?.mode === 'ADAPTIVE' ? 'ADAPTIVE' : null;
+  if (!mode) return res.status(400).json({ error: "mode must be 'ADAPTIVE' or 'SWEEP'" });
+  await setSyncMode(mode, req.principal!.email);
+  await audit({ ...actor(req), action: mode === 'SWEEP' ? 'SYNC_MODE_SWEEP' : 'SYNC_MODE_ADAPTIVE' });
   res.json({ ok: true, ...(await getSyncControlState()) });
 });
 

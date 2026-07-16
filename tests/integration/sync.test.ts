@@ -109,8 +109,12 @@ describe('syncRegistration (end-to-end with mock transport)', () => {
     // only auth + status calls, no results
     expect(calls.filter((c) => c.url.includes('/results'))).toHaveLength(0);
     const updated = await prisma.examRegistration.findUnique({ where: { id: reg.id } });
-    // IN_PROGRESS cadence is 1800s (30 min) — throttled to protect FastTest.
-    expect(updated!.nextSyncAt!.getTime()).toBe(NOW + 1800 * 1000);
+    // IN_PROGRESS cadence is 1800s (30 min), plus 0..15%-capped-at-300s jitter to
+    // de-synchronize the herd. Status changed (NOT_SYNCED→IN_PROGRESS) so there is
+    // no adaptive backoff yet.
+    const t = updated!.nextSyncAt!.getTime();
+    expect(t).toBeGreaterThanOrEqual(NOW + 1800 * 1000);
+    expect(t).toBeLessThanOrEqual(NOW + (1800 + 270) * 1000);
   });
 
   it('marks a 404 as MANUAL_REVIEW (permanent error, no infinite retry)', async () => {
