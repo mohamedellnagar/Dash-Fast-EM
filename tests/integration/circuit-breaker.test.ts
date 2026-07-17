@@ -36,6 +36,25 @@ describe('Circuit breaker', () => {
     expect(await getCircuitState(wsId)).toBe('OPEN');
   });
 
+  it('NEVER trips on infrastructure/data errors (a full disk is not FastTest being down)', async () => {
+    for (let i = 0; i < env.circuit.failureThreshold * 3; i++) {
+      await recordFailure(wsId, ERROR_CATEGORY.DATABASE);
+      await recordFailure(wsId, ERROR_CATEGORY.NOT_FOUND);
+      await recordFailure(wsId, ERROR_CATEGORY.WORKSPACE_MISMATCH);
+    }
+    expect(await getCircuitState(wsId)).toBe('CLOSED');
+    expect((await canRequest(wsId)).allowed).toBe(true);
+  });
+
+  it('a DATABASE error does not re-open a recovering (HALF_OPEN) circuit', async () => {
+    for (let i = 0; i < env.circuit.failureThreshold; i++) await recordFailure(wsId, ERROR_CATEGORY.TIMEOUT);
+    const openAt = Date.now();
+    const probe = await canRequest(wsId, () => openAt + env.circuit.openMs + 1000);
+    expect(probe.state).toBe('HALF_OPEN');
+    await recordFailure(wsId, ERROR_CATEGORY.DATABASE); // infra error during probe
+    expect(await getCircuitState(wsId)).not.toBe('OPEN'); // stayed HALF_OPEN, not re-opened
+  });
+
   it('transitions to HALF_OPEN after the open window, then closes on probe successes', async () => {
     for (let i = 0; i < env.circuit.failureThreshold; i++) await recordFailure(wsId, ERROR_CATEGORY.TIMEOUT);
     const openAt = Date.now();

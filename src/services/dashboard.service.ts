@@ -92,6 +92,34 @@ export async function statusDistribution(where: Prisma.ExamRegistrationWhereInpu
   return { counts, total };
 }
 
+/** Schools whose students' statuses changed TODAY, with the grades touched per
+ * school. Powers the "Today's Activity" panel on the operations wall. */
+export async function todaysActivity(where: Prisma.ExamRegistrationWhereInput) {
+  const start = new Date(); start.setHours(0, 0, 0, 0);
+  const rows = await prisma.examRegistration.groupBy({
+    by: ['schoolId', 'grade'],
+    where: { AND: [where, { statusChangedAt: { gte: start } }] },
+    _count: { _all: true },
+  });
+  if (!rows.length) return { schools: [], totalStudents: 0, totalSchools: 0 };
+  const schoolIds = [...new Set(rows.map((r) => r.schoolId).filter(Boolean))] as string[];
+  const schools = await prisma.school.findMany({ where: { id: { in: schoolIds } }, select: { id: true, name: true } });
+  const nameById = new Map(schools.map((s) => [s.id, s.name]));
+  const acc = new Map<string, { schoolName: string; total: number; grades: Map<string, number> }>();
+  for (const r of rows) {
+    const key = r.schoolId ?? 'UNASSIGNED';
+    if (!acc.has(key)) acc.set(key, { schoolName: nameById.get(r.schoolId ?? '') ?? 'Unassigned', total: 0, grades: new Map() });
+    const s = acc.get(key)!;
+    s.total += r._count._all;
+    const g = r.grade ?? '—';
+    s.grades.set(g, (s.grades.get(g) ?? 0) + r._count._all);
+  }
+  const list = [...acc.values()]
+    .map((s) => ({ schoolName: s.schoolName, total: s.total, grades: [...s.grades.entries()].map(([grade, count]) => ({ grade, count })).sort((a, b) => b.count - a.count) }))
+    .sort((a, b) => b.total - a.total);
+  return { schools: list, totalStudents: list.reduce((n, s) => n + s.total, 0), totalSchools: list.length };
+}
+
 /** Most recently synced registrations — a live feed for the operations wall. */
 export async function recentSyncActivity(where: Prisma.ExamRegistrationWhereInput, limit = 40) {
   const rows = await prisma.examRegistration.findMany({

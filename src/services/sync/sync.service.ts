@@ -114,7 +114,8 @@ export async function fetchAndPersistStatus(
   const rawStatus = (status.status ?? '').toString();
   const dashboardStatus = toDashboardStatus(rawStatus);
   // Adaptive-backoff counter: same status as last time → grow; changed → reset.
-  const unchangedPolls = dashboardStatus === reg.dashboardStatus ? (reg.unchangedPolls ?? 0) + 1 : 0;
+  const statusChanged = dashboardStatus !== reg.dashboardStatus;
+  const unchangedPolls = statusChanged ? 0 : (reg.unchangedPolls ?? 0) + 1;
 
   await prisma.fastTestStatusSnapshot.create({
     data: {
@@ -146,6 +147,7 @@ export async function fetchAndPersistStatus(
       syncError: null,
       syncRetryCount: 0,
       unchangedPolls,
+      ...(statusChanged ? { statusChangedAt: new Date(now()) } : {}),
     },
   });
   await prisma.fastTestWorkspace.update({ where: { id: ws.workspaceId }, data: { lastSuccessfulSyncAt: new Date(now()) } }).catch(() => {});

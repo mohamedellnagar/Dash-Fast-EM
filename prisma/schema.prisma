@@ -275,6 +275,7 @@ model ExamRegistration {
   nextSyncAt         DateTime?
   syncPriority       Int     @default(100) // lower = higher priority
   unchangedPolls     Int     @default(0) // consecutive polls that returned the same status (adaptive backoff)
+  statusChangedAt    DateTime? // when dashboardStatus last actually changed (for "today's activity")
 
   // Stale-data detection (computed by the scheduler)
   isStale            Boolean  @default(false)
@@ -311,6 +312,7 @@ model ExamRegistration {
   @@index([emiratesId])
   @@index([deletedAt, dashboardStatus])
   @@index([lastSyncAt]) // live sync feed + SWEEP round-robin order
+  @@index([statusChangedAt]) // today's activity (schools/grades with status changes)
 }
 
 // ---------------------------------------------------------------------------

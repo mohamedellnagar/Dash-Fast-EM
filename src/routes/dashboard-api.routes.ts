@@ -21,6 +21,11 @@ dashboardApiRouter.get('/overview', view, asyncHandler(async (req, res) => {
   res.json(await dash.overview(where));
 }));
 
+dashboardApiRouter.get('/todays-activity', view, asyncHandler(async (req, res) => {
+  const { where } = whereFrom(req);
+  res.json(await dash.todaysActivity(where));
+}));
+
 dashboardApiRouter.get('/sync-feed', view, asyncHandler(async (req, res) => {
   const { where } = whereFrom(req);
   res.json({ items: await dash.recentSyncActivity(where, 40) });

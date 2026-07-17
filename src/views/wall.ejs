@@ -33,7 +33,7 @@
       grid-template-rows:1.25fr 1fr 1fr;
       grid-template-areas:
         "hero hero hero hero ring ring ring status status status status status"
-        "hero hero hero hero ring ring ring subj subj subj subj subj"
+        "today today today today today today today subj subj subj subj subj"
         "tot  tot  prog prog velo velo velo feed feed feed feed feed";}
     .tile{position:relative;overflow:hidden;min-height:0;display:flex;flex-direction:column;
       background:linear-gradient(160deg,#1a2338 0%,#131a2b 100%);border:1px solid var(--line);border-radius:20px;padding:18px 20px;
@@ -47,14 +47,24 @@
     .a-total{--accent:linear-gradient(90deg,#38bdf8,#818cf8)}
     .a-completed{--accent:var(--c-completed)} .a-inprogress{--accent:var(--c-inprogress)}
     .a-synced{--accent:var(--c-notstarted)}
-    /* hero (completed) */
+    /* hero (completed) — compact single-row now */
     .hero{grid-area:hero;justify-content:center;background:linear-gradient(155deg,#15321f 0%,#111c2b 62%)}
-    .hero .val{font-size:clamp(52px,8vw,120px);color:var(--c-completed)}
-    .hero .prog{height:10px;background:#0b1220;border-radius:6px;overflow:hidden;margin-top:16px}
+    .hero .val{font-size:clamp(36px,4.6vw,68px);color:var(--c-completed)}
+    .hero .prog{height:8px;background:#0b1220;border-radius:6px;overflow:hidden;margin-top:10px}
     .hero .prog>span{display:block;height:100%;background:linear-gradient(90deg,#16a34a,#22c55e);border-radius:6px;transition:width .6s ease}
     /* mid tiles */
-    .ring{grid-area:ring} .status{grid-area:status} .subj{grid-area:subj}
+    .ring{grid-area:ring} .status{grid-area:status} .subj{grid-area:subj} .today{grid-area:today}
     .tot{grid-area:tot} .prog-t{grid-area:prog} .velo{grid-area:velo} .feed{grid-area:feed}
+    /* today's activity */
+    .today .tlist{overflow-y:auto;display:flex;flex-direction:column;gap:8px;flex:1;min-height:0;margin-top:8px}
+    .today .tlist::-webkit-scrollbar{width:6px} .today .tlist::-webkit-scrollbar-thumb{background:#ffffff22;border-radius:3px}
+    .today .trow{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:6px 0;border-bottom:1px solid #ffffff0d}
+    .today .snm{font-weight:700;font-size:14px;min-width:180px;flex:0 0 auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:240px}
+    .today .stot{background:#22c55e22;color:#86efac;border-radius:20px;padding:2px 10px;font-size:12px;font-weight:800;flex:0 0 auto}
+    .today .gchips{display:flex;gap:6px;flex-wrap:wrap}
+    .today .gchip{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:2px 9px;font-size:12px;color:var(--muted)}
+    .today .gchip b{color:var(--ink)}
+    .today .empty{color:var(--dim);font-size:14px;padding:14px 2px}
     /* live sync feed */
     .feed .flist{overflow:hidden;display:flex;flex-direction:column;flex:1;min-height:0;margin-top:8px}
     .feed .frow{display:grid;grid-template-columns:1fr auto auto;gap:12px;align-items:center;padding:5px 0;border-bottom:1px solid #ffffff0d}
@@ -68,8 +78,8 @@
     .st-UNKNOWN{background:#64748b22;color:#cbd5e1}
     /* center small KPI content so tall cards don't leave dead space */
     .tot,.prog-t{justify-content:center}
-    /* hero completion trend sparkline */
-    .hero .spark{width:100%;height:52px;display:block;margin-top:14px}
+    /* hero completion trend sparkline (compact) */
+    .hero .spark{width:100%;height:30px;display:block;margin-top:8px}
     /* daily velocity mini-bars */
     .velo .bars{display:flex;align-items:flex-end;gap:5px;flex:1;height:100%;margin-top:10px;min-height:0}
     .velo .b{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px;height:100%}
@@ -89,10 +99,11 @@
     .seg-legend .pc{color:var(--dim);font-size:12px;width:48px;text-align:right}
     /* sync progress ring */
     .ring-wrap{display:flex;flex-direction:column;align-items:center;justify-content:center;flex:1;gap:6px;min-height:0}
-    .ringg{position:relative;width:min(22vh,180px);aspect-ratio:1}
+    .ringg{position:relative;width:min(18vh,140px);aspect-ratio:1}
     .ringg svg{transform:rotate(-90deg);width:100%;height:100%}
     .ringg .center{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center}
-    .ringg .center .big{font-size:clamp(26px,3.2vw,40px);font-weight:800;font-variant-numeric:tabular-nums}
+    .ringg .center .big{font-size:clamp(18px,2.1vw,27px);font-weight:800;font-variant-numeric:tabular-nums;line-height:1}
+    .ringg .center .dim{font-size:11px!important;margin-top:1px}
     .throughput{display:flex;align-items:baseline;gap:8px;justify-content:center;margin-top:2px}
     .throughput .n{font-size:24px;font-weight:800;color:var(--good);font-variant-numeric:tabular-nums}
     /* subjects (tall) */
@@ -140,8 +151,8 @@
       <div class="ring-wrap">
         <div class="ringg">
           <svg viewBox="0 0 100 100">
-            <circle cx="50" cy="50" r="42" fill="none" stroke="#26324a" stroke-width="10"></circle>
-            <circle id="ringFg" cx="50" cy="50" r="42" fill="none" stroke="var(--good)" stroke-width="10" stroke-linecap="round" stroke-dasharray="264" stroke-dashoffset="264"></circle>
+            <circle cx="50" cy="50" r="43" fill="none" stroke="#26324a" stroke-width="7"></circle>
+            <circle id="ringFg" cx="50" cy="50" r="43" fill="none" stroke="var(--good)" stroke-width="7" stroke-linecap="round" stroke-dasharray="270.2" stroke-dashoffset="270.2"></circle>
           </svg>
           <div class="center"><div class="big" id="r-pc">—</div><div class="dim" style="font-size:12px">synced</div></div>
         </div>
@@ -161,6 +172,12 @@
     <div class="tile subj">
       <div class="cap">Completion by Subject</div>
       <div class="list" id="subjects"></div>
+    </div>
+
+    <!-- Today's activity: schools + grades with status changes today -->
+    <div class="tile today">
+      <div class="cap">📅 Today's Activity — schools with student status changes today</div>
+      <div class="tlist" id="todayList"></div>
     </div>
 
     <!-- Live sync feed -->
@@ -232,12 +249,13 @@
     async function refresh(){
       try{
         var brandDot = document.querySelector('.brand .dot');
-        var ov, subj, q, health, exam, feed;
-        try { [ov, subj, q, health, exam, feed] = await Promise.all([
+        var ov, subj, q, health, exam, feed, today;
+        try { [ov, subj, q, health, exam, feed, today] = await Promise.all([
           j('/api/dashboard/overview'), j('/api/dashboard/subjects'),
           j('/api/queue/stats').catch(function(){return null;}), j('/api/dashboard/api-health').catch(function(){return null;}),
           j('/api/dashboard/exam-analytics').catch(function(){return null;}),
-          j('/api/dashboard/sync-feed').catch(function(){return null;})
+          j('/api/dashboard/sync-feed').catch(function(){return null;}),
+          j('/api/dashboard/todays-activity').catch(function(){return null;})
         ]); } catch(e){ brandDot.style.background='#d03b3b'; brandDot.style.boxShadow='0 0 10px #d03b3b'; return; }
         brandDot.style.background='#0ca30c'; brandDot.style.boxShadow='0 0 10px #0ca30c';
 
@@ -255,6 +273,19 @@
         var daily = (exam && exam.daily) ? exam.daily : [];
         heroSpark(daily.map(function(d){return d.count||0;}));
         veloBars(daily.slice(-14).map(function(d){return {l:String(d.date).slice(5),v:d.count||0};}));
+
+        // today's activity: schools + grades with status changes today
+        var tl = document.getElementById('todayList');
+        if (today && today.schools) {
+          if (!today.schools.length) {
+            tl.innerHTML = '<div class="empty">No student status changes yet today.</div>';
+          } else {
+            tl.innerHTML = today.schools.map(function(s){
+              var chips = s.grades.map(function(g){ var gr=/grade/i.test(String(g.grade))?g.grade:'Grade '+g.grade; return '<span class="gchip">'+gr+' <b>'+fmt(g.count)+'</b></span>'; }).join('');
+              return '<div class="trow"><span class="snm" title="'+s.schoolName+'">'+s.schoolName+'</span><span class="stot">'+fmt(s.total)+'</span><span class="gchips">'+chips+'</span></div>';
+            }).join('');
+          }
+        }
 
         // live sync feed (latest checked codes + status)
         var fl = document.getElementById('syncFeed');
@@ -281,7 +312,7 @@
         // sync ring
         var p = pct(synced,total);
         document.getElementById('r-pc').textContent = p+'%';
-        var C=264; document.getElementById('ringFg').style.strokeDashoffset = (C-(C*p/100)).toFixed(1);
+        var C=270.2; document.getElementById('ringFg').style.strokeDashoffset = (C-(C*p/100)).toFixed(1);
         var tput = q ? (q.jobsLastMin||0) : 0;
         document.getElementById('r-tput').textContent = fmt(tput);
         document.getElementById('r-remaining').textContent = fmt(ov.NOT_SYNCED||0)+' remaining · '+(q?fmt(q.running||0)+' running · '+fmt(q.queued||0)+' queued':'');

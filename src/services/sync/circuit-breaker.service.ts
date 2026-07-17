@@ -69,7 +69,21 @@ export async function recordSuccess(workspaceId: string): Promise<void> {
 
 const AUTH_CATEGORIES: ErrorCategory[] = [ERROR_CATEGORY.AUTHENTICATION, ERROR_CATEGORY.TOKEN_EXPIRED];
 
+// Categories that reflect OUR infrastructure (a failing local DB/disk) or a
+// single registration's data — NOT FastTest's health. These must never trip or
+// re-open the FastTest circuit: a full disk or one bad test code is not FastTest
+// being down. Genuine FastTest signals (timeout, network, 5xx, auth) still trip.
+const NON_FASTTEST_CATEGORIES: ErrorCategory[] = [
+  ERROR_CATEGORY.DATABASE,
+  ERROR_CATEGORY.NOT_FOUND,
+  ERROR_CATEGORY.INVALID_TEST_CODE,
+  ERROR_CATEGORY.WORKSPACE_MISMATCH,
+];
+
 export async function recordFailure(workspaceId: string, category: ErrorCategory, now: () => number = () => Date.now()): Promise<boolean> {
+  // Infrastructure/data errors don't say anything about FastTest — ignore them.
+  if (NON_FASTTEST_CATEGORIES.includes(category)) return false;
+
   const cb = await getOrCreate(workspaceId);
   const failureCount = cb.failureCount + 1;
 
