@@ -310,6 +310,7 @@ model ExamRegistration {
   @@index([deletedAt])
   @@index([emiratesId])
   @@index([deletedAt, dashboardStatus])
+  @@index([lastSyncAt]) // live sync feed + SWEEP round-robin order
 }
 
 // ---------------------------------------------------------------------------

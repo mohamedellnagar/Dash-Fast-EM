@@ -21,6 +21,11 @@ dashboardApiRouter.get('/overview', view, asyncHandler(async (req, res) => {
   res.json(await dash.overview(where));
 }));
 
+dashboardApiRouter.get('/sync-feed', view, asyncHandler(async (req, res) => {
+  const { where } = whereFrom(req);
+  res.json({ items: await dash.recentSyncActivity(where, 40) });
+}));
+
 dashboardApiRouter.get('/status-distribution', view, asyncHandler(async (req, res) => {
   const { where } = whereFrom(req);
   res.json(await dash.statusDistribution(where));
@@ -67,6 +72,11 @@ dashboardApiRouter.get('/subjects/:subject', view, asyncHandler(async (req, res)
     dash.workspaceHealthForSubject(examSubject),
   ]);
   res.json({ subject: examSubject, kpis, bySchool, byGrade, scoresBySchool, durations, scoreDistribution: dist, trends, workspace });
+}));
+
+dashboardApiRouter.get('/completion-by-grade', view, asyncHandler(async (req, res) => {
+  const { where } = whereFrom(req);
+  res.json({ grades: await dash.completionByGrade(where) });
 }));
 
 dashboardApiRouter.get('/completion-trends', view, asyncHandler(async (req, res) => {

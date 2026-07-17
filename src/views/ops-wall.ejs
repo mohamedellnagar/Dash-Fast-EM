@@ -3,237 +3,219 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Operations Center — Live</title>
+  <title>Operations Center — Exam Delivery Overview</title>
   <style>
     :root{
-      --bg:#080a0f; --card:#11141c; --card2:#141824; --line:#212636; --ink:#eef1f8; --muted:#9aa0b4; --dim:#666c82;
-      --good:#26c281; --warn:#f0b429; --bad:#e05260; --info:#4c8dff; --violet:#9b7be8;
+      --plane:#0a0f1a; --surface:#141c2e; --line:#26324a; --ink:#fff; --muted:#c3c2b7; --dim:#8a897f;
+      --ok:#22c55e; --warn:#f59e0b; --bad:#ef4444; --info:#3b82f6; --accent:#818cf8;
+      --c-completed:#22c55e; --c-inprogress:#f59e0b; --c-notstarted:#3b82f6; --c-notsynced:#6b7280;
     }
     *{box-sizing:border-box;margin:0;padding:0}
     html,body{height:100%}
-    body{background:radial-gradient(900px 500px at 0% -10%, #12182a 0%, transparent 55%), var(--bg);
-      color:var(--ink);font-family:"Segoe UI",-apple-system,BlinkMacSystemFont,Roboto,Helvetica,Arial,sans-serif;
-      overflow:hidden;display:flex;flex-direction:column;height:100vh;padding:16px 18px;gap:12px;-webkit-font-smoothing:antialiased}
-    .muted{color:var(--muted)}.dim{color:var(--dim)}
+    body{background:radial-gradient(1200px 700px at 15% -10%,#16213a 0%,var(--plane) 55%);color:var(--ink);
+      font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;overflow:hidden;
+      display:flex;flex-direction:column;height:100vh;padding:16px;gap:14px}
+    .muted{color:var(--muted)} .dim{color:var(--dim)}
     header{display:flex;align-items:center;gap:14px;flex:0 0 auto}
-    .htitle{font-size:21px;font-weight:800;letter-spacing:.3px}
-    .htitle .ic{margin-right:8px}
+    header .brand{font-size:21px;font-weight:800}
+    header .brand small{display:block;font-size:12px;font-weight:500;color:var(--dim);margin-top:2px}
     header .spacer{flex:1}
-    .pill{display:inline-flex;align-items:center;gap:8px;padding:6px 13px;border-radius:999px;font-size:13px;font-weight:700;border:1px solid var(--line);background:var(--card)}
-    .pill .d{width:9px;height:9px;border-radius:50%}
-    .pulse{animation:pulse 1.6s infinite}@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
-    #clock{font-variant-numeric:tabular-nums;font-size:21px;font-weight:700}
-    /* status tiles */
-    .tiles{display:grid;grid-template-columns:repeat(8,1fr);gap:10px;flex:0 0 auto}
-    .tile{background:linear-gradient(180deg,var(--card2),var(--card));border:1px solid var(--line);border-radius:14px;padding:12px 14px;position:relative;overflow:hidden}
-    .tile .l{font-size:11px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.5px}
-    .tile .v{font-size:clamp(22px,2.6vw,34px);font-weight:800;margin-top:5px;font-variant-numeric:tabular-nums;line-height:1}
-    .tile .s{font-size:11px;color:var(--dim);margin-top:3px}
-    .tile.ok .v{color:var(--good)} .tile.warn .v{color:var(--warn)} .tile.bad .v{color:var(--bad)} .tile.info .v{color:var(--info)}
-    /* progress */
-    .progress{background:linear-gradient(180deg,var(--card2),var(--card));border:1px solid var(--line);border-radius:14px;padding:14px 18px;flex:0 0 auto}
-    .progress .top{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:9px}
-    .progress .top .t{font-size:13px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.6px}
-    .progress .top .n{font-size:15px;font-weight:700}
-    .pbar{height:16px;background:#0a0c12;border-radius:9px;overflow:hidden}
-    .pbar>span{display:block;height:100%;background:linear-gradient(90deg,#26c281,#4c8dff);border-radius:9px;transition:width .8s cubic-bezier(.2,.8,.2,1)}
-    /* grid */
-    .grid{flex:1 1 auto;display:grid;grid-template-columns:1fr 1.4fr 1fr;grid-template-rows:1fr auto;gap:12px;min-height:0}
-    .panel{background:linear-gradient(180deg,var(--card2),var(--card));border:1px solid var(--line);border-radius:14px;padding:14px 16px;display:flex;flex-direction:column;min-height:0}
-    .panel h3{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:1px;margin-bottom:12px;display:flex;align-items:center;gap:8px;flex:0 0 auto}
-    .panel .body{flex:1;min-height:0;overflow:auto}
-    .wide{grid-column:1 / -1}
-    /* health rows */
-    .hrow{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid var(--line);font-size:14px}
-    .hrow:last-child{border-bottom:none}
-    .hrow b{font-size:17px;font-variant-numeric:tabular-nums}
-    .lat{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:8px}
-    .lat .m{background:#0a0c12;border-radius:9px;padding:9px;text-align:center}
-    .lat .m .v{font-size:19px;font-weight:800;font-variant-numeric:tabular-nums} .lat .m .l{font-size:10px;color:var(--dim);text-transform:uppercase}
-    .gauge{height:11px;background:#0a0c12;border-radius:7px;overflow:hidden;margin-top:6px}
-    .gauge>span{display:block;height:100%;border-radius:7px;transition:width .6s}
-    /* chart */
-    svg.line{width:100%;height:100%}
-    /* queue bars */
-    .qbar{margin:9px 0}
-    .qbar .top{display:flex;justify-content:space-between;font-size:13.5px;margin-bottom:4px}
-    .qbar .top b{font-variant-numeric:tabular-nums}
-    .qbar .track{height:11px;background:#0a0c12;border-radius:6px;overflow:hidden}
-    .qbar .track>span{display:block;height:100%;border-radius:6px}
-    /* errors */
-    table.err{width:100%;font-size:12.5px;border-collapse:collapse}
-    table.err td{padding:5px 8px;border-bottom:1px solid var(--line)}
-    .chip{padding:2px 8px;border-radius:6px;font-weight:700;font-size:11px;background:#e0526022;color:#e05260}
+    .pill{padding:6px 13px;border-radius:999px;font-size:13px;font-weight:700;border:1px solid var(--line);background:var(--surface);white-space:nowrap}
+    #clock{font-variant-numeric:tabular-nums;font-size:20px;font-weight:700}
+    .kpis{flex:0 0 auto;display:grid;grid-template-columns:repeat(6,1fr);gap:14px}
+    .kpi{background:linear-gradient(160deg,#1a2338,#131a2b);border:1px solid var(--line);border-radius:16px;padding:14px 18px;position:relative;overflow:hidden}
+    .kpi::after{content:"";position:absolute;left:0;top:0;width:100%;height:3px;background:var(--accent);opacity:.6}
+    .kpi .l{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted)}
+    .kpi .v{font-size:clamp(26px,3vw,40px);font-weight:800;font-variant-numeric:tabular-nums;line-height:1;margin-top:6px}
+    .kpi .s{font-size:12px;color:var(--dim);margin-top:4px}
+    .kpi.now::after{background:var(--warn)} .kpi.now .v{color:var(--warn)}
+    .kpi.done::after{background:var(--ok)} .kpi.done .v{color:var(--ok)}
+    .kpi.rapid::after{background:var(--bad)} .kpi.rapid .v{color:var(--bad)}
+    .board{flex:1 1 auto;display:grid;gap:14px;min-height:0;grid-template-columns:repeat(12,1fr);grid-template-rows:1fr 1fr 0.9fr;
+      grid-template-areas:
+        "schools schools schools schools funnel funnel funnel funnel subj subj subj subj"
+        "schools schools schools schools grade grade grade grade subj subj subj subj"
+        "hour hour hour hour hour hour daily daily daily daily daily daily";}
+    .tile{background:linear-gradient(160deg,#1a2338,#131a2b);border:1px solid var(--line);border-radius:18px;padding:16px 18px;display:flex;flex-direction:column;min-height:0;
+      box-shadow:0 18px 40px -22px rgba(0,0,0,.9)}
+    .tile .cap{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:12px;flex:0 0 auto}
+    .schools{grid-area:schools} .funnel{grid-area:funnel} .subj{grid-area:subj} .grade{grid-area:grade} .hour{grid-area:hour} .daily{grid-area:daily}
+    .hlist{overflow-y:auto;display:flex;flex-direction:column;gap:6px;flex:1;min-height:0}
+    .hlist::-webkit-scrollbar{width:6px} .hlist::-webkit-scrollbar-thumb{background:#ffffff22;border-radius:3px}
+    .hrow{display:grid;grid-template-columns:130px 1fr 46px;align-items:center;gap:10px}
+    .hrow .nm{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .hrow .track{height:11px;background:var(--plane);border-radius:6px;overflow:hidden}
+    .hrow .track > span{display:block;height:100%;border-radius:6px;transition:width .6s ease}
+    .hrow .pc{text-align:right;font-weight:800;font-size:13px;font-variant-numeric:tabular-nums}
+    .fstage{margin-bottom:14px} .fstage:last-child{margin-bottom:0}
+    .fstage .fh{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;margin-bottom:5px}
+    .fstage .fh b{font-size:20px;font-variant-numeric:tabular-nums}
+    .fstage .fbar{height:16px;background:var(--plane);border-radius:8px;overflow:hidden}
+    .fstage .fbar > span{display:block;height:100%;border-radius:8px;transition:width .6s ease}
+    .vbars{display:flex;align-items:flex-end;gap:5px;flex:1;height:100%;min-height:0;margin-top:6px}
+    .vbars .b{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:flex-end;gap:4px;height:100%}
+    .vbars .b .bar{width:100%;border-radius:4px 4px 0 0;min-height:3px;transition:height .35s ease}
+    .vbars .b .bv{font-size:10px;font-weight:700;font-variant-numeric:tabular-nums}
+    .vbars .b .bl{font-size:9px;color:var(--dim);white-space:nowrap}
   </style>
 </head>
-<body>
+<body data-palette="#22c55e,#f59e0b,#3b82f6,#6b7280">
   <header>
-    <div class="htitle"><span class="ic">⚙️</span>Operations Center</div>
-    <span class="pill" id="engine"><span class="d pulse" style="background:var(--good)"></span>Engine —</span>
-    <span class="pill" id="mode">Mode —</span>
+    <div class="brand">⚙️ Operations Center<small>Exam delivery overview · administrative &amp; exam sides</small></div>
+    <span class="pill" id="healthPill">FastTest: —</span>
     <div class="spacer"></div>
-    <span class="pill" id="upd">live</span>
-    <div id="clock">--:--:--</div>
+    <span id="clock">--:--:--</span>
   </header>
 
-  <section class="tiles">
-    <div class="tile ok"><div class="l">Throughput</div><div class="v" id="t-tput">—</div><div class="s">jobs / min</div></div>
-    <div class="tile info"><div class="l">Queued</div><div class="v" id="t-queued">—</div><div class="s" id="t-oldest">—</div></div>
-    <div class="tile warn"><div class="l">Running</div><div class="v" id="t-running">—</div><div class="s">active now</div></div>
-    <div class="tile"><div class="l">Retry</div><div class="v" id="t-retry">—</div><div class="s">scheduled</div></div>
-    <div class="tile bad"><div class="l">Dead-letter</div><div class="v" id="t-dead">—</div><div class="s">needs action</div></div>
-    <div class="tile"><div class="l">Not Synced</div><div class="v" id="t-notsynced">—</div><div class="s">remaining</div></div>
-    <div class="tile"><div class="l">Failed / min</div><div class="v" id="t-failed">—</div><div class="s">last minute</div></div>
-    <div class="tile ok"><div class="l">Circuit</div><div class="v" id="t-circuit" style="font-size:22px">—</div><div class="s" id="t-api">—</div></div>
+  <section class="kpis">
+    <div class="kpi"><div class="l">Schools</div><div class="v" id="k-schools">—</div><div class="s" id="k-schools-done">—</div></div>
+    <div class="kpi"><div class="l">Students</div><div class="v" id="k-students">—</div><div class="s" id="k-regs">—</div></div>
+    <div class="kpi done"><div class="l">Completion</div><div class="v" id="k-compl">—</div><div class="s">overall</div></div>
+    <div class="kpi now"><div class="l">🔴 Testing Now</div><div class="v" id="k-now">—</div><div class="s">in the exam</div></div>
+    <div class="kpi"><div class="l">Avg Time</div><div class="v" id="k-time">—</div><div class="s">per exam</div></div>
+    <div class="kpi rapid"><div class="l">⚠ Rapid (&lt;2m)</div><div class="v" id="k-rapid">—</div><div class="s" id="k-rapid-pc">needs review</div></div>
   </section>
 
-  <div class="progress">
-    <div class="top"><span class="t">Sync Progress</span><span class="n" id="p-txt">—</span></div>
-    <div class="pbar"><span id="p-bar" style="width:0%"></span></div>
-  </div>
-
-  <section class="grid">
-    <div class="panel">
-      <h3>🩺 FastTest Health</h3>
-      <div class="body">
-        <div class="hrow"><span class="muted">Status</span><b id="h-verdict">—</b></div>
-        <div class="hrow"><span class="muted">Success rate</span><b id="h-success">—</b></div>
-        <div class="hrow"><span class="muted">Calls / min</span><b id="h-cpm">—</b></div>
-        <div class="lat">
-          <div class="m"><div class="v" id="h-p50">—</div><div class="l">p50</div></div>
-          <div class="m"><div class="v" id="h-p95">—</div><div class="l">p95</div></div>
-          <div class="m"><div class="v" id="h-p99">—</div><div class="l">p99</div></div>
-        </div>
-        <div style="margin-top:12px"><span class="muted" style="font-size:12px">Rate utilization <span id="h-rate" class="dim"></span></span><div class="gauge"><span id="h-rateb" style="width:0%;background:var(--info)"></span></div></div>
-      </div>
+  <section class="board">
+    <div class="tile schools">
+      <div class="cap">🏫 Schools Needing Attention — lowest completion</div>
+      <div class="hlist" id="schools"></div>
     </div>
-
-    <div class="panel">
-      <h3>📈 Throughput — last 30 min</h3>
-      <svg class="line" id="chart" viewBox="0 0 600 200" preserveAspectRatio="none"></svg>
+    <div class="tile funnel">
+      <div class="cap">Exam Status Funnel</div>
+      <div id="funnel" style="flex:1"></div>
     </div>
-
-    <div class="panel">
-      <h3>📦 Queue Breakdown</h3>
-      <div class="body" id="queue"></div>
+    <div class="tile grade">
+      <div class="cap">Completion by Grade</div>
+      <div class="hlist" id="grades"></div>
     </div>
-
-    <div class="panel wide">
-      <h3>⚠️ Recent Errors <span class="dim" id="err-n"></span></h3>
-      <div class="body"><table class="err"><tbody id="err-body"></tbody></table></div>
+    <div class="tile subj">
+      <div class="cap">Completion by Subject</div>
+      <div class="hlist" id="subjects"></div>
+    </div>
+    <div class="tile hour">
+      <div class="cap">Activity by Hour of Day</div>
+      <div class="vbars" id="hour"></div>
+    </div>
+    <div class="tile daily">
+      <div class="cap">Daily Velocity — exams started per day</div>
+      <svg id="dailyChart" style="width:100%;flex:1;min-height:0;display:block"></svg>
     </div>
   </section>
 
   <script>
     var fmt=function(n){return (n==null||isNaN(n))?'—':Number(n).toLocaleString('en-US');};
-    var ago=function(iso){if(!iso)return '—';var s=Math.max(0,(Date.now()-new Date(iso).getTime())/1000);return s<60?Math.round(s)+'s':s<3600?Math.round(s/60)+'m':Math.round(s/3600)+'h';};
+    var pct=function(n,d){return d>0?Math.round(n/d*1000)/10:0;};
+    var mmss=function(s){if(s==null||!s)return '—';var m=Math.floor(s/60),x=Math.round(s%60);return m+'m '+(x<10?'0':'')+x+'s';};
     function tick(){document.getElementById('clock').textContent=new Date().toLocaleTimeString('en-GB');}
-    setInterval(tick,1000);tick();
+    setInterval(tick,1000); tick();
     async function j(u){var r=await fetch(u,{headers:{Accept:'application/json'}});if(!r.ok)throw 0;return r.json();}
-    function set(id,v){var e=document.getElementById(id);if(e)e.textContent=v;}
-    function tileClass(id,cls){var e=document.getElementById(id);if(e){e.className='tile '+cls;}}
 
-    function lineChart(series){
-      var svg=document.getElementById('chart');svg.innerHTML='';var W=600,H=200,p=6;
-      var pts=(series||[]).map(function(s){return s.count||0;});
-      if(pts.length<2)return;
-      var max=Math.max.apply(null,pts)||1;
-      var x=function(i){return p+i/(pts.length-1)*(W-2*p);},y=function(v){return H-p-v/max*(H-2*p);};
-      var area='M'+x(0)+','+(H-p);pts.forEach(function(v,i){area+=' L'+x(i).toFixed(1)+','+y(v).toFixed(1);});area+=' L'+x(pts.length-1)+','+(H-p)+' Z';
-      var a=document.createElementNS('http://www.w3.org/2000/svg','path');a.setAttribute('d',area);a.setAttribute('fill','#26c281');a.setAttribute('opacity','.13');svg.appendChild(a);
-      var d='';pts.forEach(function(v,i){d+=(i?' L':'M')+x(i).toFixed(1)+','+y(v).toFixed(1);});
-      var l=document.createElementNS('http://www.w3.org/2000/svg','path');l.setAttribute('d',d);l.setAttribute('fill','none');l.setAttribute('stroke','#26c281');l.setAttribute('stroke-width','2.5');l.setAttribute('vector-effect','non-scaling-stroke');svg.appendChild(l);
+    function hbars(el,items,colorFn){
+      var box=document.getElementById(el);box.innerHTML='';
+      items.forEach(function(i){
+        var row=document.createElement('div');row.className='hrow';
+        row.innerHTML='<span class="nm" title="'+i.l+'">'+i.l+'</span>'+
+          '<span class="track"><span style="width:'+i.v+'%;background:'+(colorFn?colorFn(i.v):'linear-gradient(90deg,#16a34a,#22c55e)')+'"></span></span>'+
+          '<span class="pc">'+i.v+'%</span>';
+        box.appendChild(row);
+      });
+    }
+    function vbars(el,items,color){
+      var box=document.getElementById(el);box.innerHTML='';
+      var max=Math.max.apply(null,items.map(function(i){return i.v;}).concat([1]));
+      var avail=Math.max(30,(box.clientHeight||140)-16);
+      items.forEach(function(i){
+        var b=document.createElement('div');b.className='b';
+        b.innerHTML='<div class="bv">'+(i.v>=1000?Math.round(i.v/1000)+'k':i.v)+'</div>'+
+          '<div class="bar" style="height:'+Math.max(3,Math.round(i.v/max*avail))+'px;background:'+color+'" title="'+i.l+': '+fmt(i.v)+'"></div>'+
+          '<div class="bl">'+i.l+'</div>';
+        box.appendChild(b);
+      });
+    }
+    function completionColor(v){ return v>=80?'linear-gradient(90deg,#16a34a,#22c55e)':v>=50?'linear-gradient(90deg,#d97706,#f59e0b)':'linear-gradient(90deg,#dc2626,#ef4444)'; }
+    var SVGNS='http://www.w3.org/2000/svg';
+    function areaChart(el, items){
+      var svg=document.getElementById(el); if(!svg||!items.length) return; svg.innerHTML='';
+      var W=svg.clientWidth||900, H=svg.clientHeight||180, pL=10,pR=10,pB=20,pT=20;
+      svg.setAttribute('viewBox','0 0 '+W+' '+H);
+      var vals=items.map(function(i){return i.v;}); var max=Math.max.apply(null,vals)||1; var n=items.length;
+      var x=function(i){return pL+(n<2?0.5:i/(n-1))*(W-pL-pR);};
+      var y=function(v){return H-pB-(v/max)*(H-pB-pT);};
+      var mk=function(t,a){var e=document.createElementNS(SVGNS,t);for(var k in a)e.setAttribute(k,a[k]);return e;};
+      var defs=mk('defs',{}); defs.innerHTML='<linearGradient id="dg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#22c55e" stop-opacity="0.55"/><stop offset="1" stop-color="#22c55e" stop-opacity="0"/></linearGradient>'; svg.appendChild(defs);
+      var dA='M'+x(0)+','+(H-pB); items.forEach(function(it,i){dA+=' L'+x(i).toFixed(1)+','+y(it.v).toFixed(1);}); dA+=' L'+x(n-1)+','+(H-pB)+' Z';
+      svg.appendChild(mk('path',{d:dA,fill:'url(#dg)'}));
+      var dL=''; items.forEach(function(it,i){dL+=(i?' L':'M')+x(i).toFixed(1)+','+y(it.v).toFixed(1);});
+      svg.appendChild(mk('path',{d:dL,fill:'none',stroke:'#22c55e','stroke-width':'2.5','stroke-linejoin':'round'}));
+      // peak marker + label
+      var pi=vals.indexOf(max);
+      svg.appendChild(mk('circle',{cx:x(pi),cy:y(max),r:'4',fill:'#22c55e',stroke:'#0a0f1a','stroke-width':'2'}));
+      var pt=mk('text',{x:x(pi),y:y(max)-9,fill:'#fff','font-size':'14','font-weight':'800','text-anchor':'middle'}); pt.textContent=(max>=1000?(Math.round(max/100)/10)+'k':max); svg.appendChild(pt);
+      // sparse x-axis date labels (~7 ticks)
+      var ticks=Math.min(7,n-1);
+      for(var t=0;t<=ticks;t++){var i=Math.round(t/ticks*(n-1));var tx=mk('text',{x:x(i),y:H-5,fill:'#8a897f','font-size':'10','text-anchor':(i===0?'start':i===n-1?'end':'middle')});tx.textContent=items[i].l;svg.appendChild(tx);}
     }
 
-    async function load(){
+    async function refresh(){
       try{
-        var qs,health,ctrl,ov;
-        [qs,health,ctrl,ov]=await Promise.all([
-          j('/api/queue/stats'), j('/api/fasttest/health').catch(function(){return null;}),
-          j('/api/queue/control-state').catch(function(){return null;}), j('/api/dashboard/overview').catch(function(){return null;})
+        var ov, schools, subj, grades, exam;
+        [ov, schools, subj, grades, exam] = await Promise.all([
+          j('/api/dashboard/overview'),
+          j('/api/dashboard/schools').catch(function(){return {schools:[]};}),
+          j('/api/dashboard/subjects').catch(function(){return {subjects:[]};}),
+          j('/api/dashboard/completion-by-grade').catch(function(){return {grades:[]};}),
+          j('/api/dashboard/exam-analytics').catch(function(){return null;})
         ]);
-        set('upd','updated '+new Date().toLocaleTimeString('en-GB'));
 
-        // engine + mode pills
-        var eng=document.getElementById('engine'), md=document.getElementById('mode');
-        if(ctrl){
-          if(ctrl.globalPaused){ eng.innerHTML='<span class="d" style="background:var(--bad)"></span>Engine OFF'; }
-          else if(!ctrl.allowedNow){ eng.innerHTML='<span class="d" style="background:var(--warn)"></span>Outside window'; }
-          else { eng.innerHTML='<span class="d pulse" style="background:var(--good)"></span>Engine ON'; }
-          md.textContent = ctrl.fastMode ? 'Mode: ⚡ FAST' : 'Mode: Normal';
-        }
+        var sc = schools.schools||[];
+        var doneSchools = sc.filter(function(s){return s.completionRate>=100;}).length;
+        document.getElementById('k-schools').textContent=fmt(sc.length);
+        document.getElementById('k-schools-done').textContent=fmt(doneSchools)+' fully complete';
+        document.getElementById('k-students').textContent=fmt(ov.studentCount);
+        document.getElementById('k-regs').textContent=fmt(ov.totalRegistered)+' registrations';
+        document.getElementById('k-compl').textContent=(ov.completionRate!=null?ov.completionRate+'%':'—');
+        document.getElementById('k-now').textContent=fmt(ov.IN_PROGRESS);
+        document.getElementById('k-time').textContent=mmss(ov.avgTimeUsedSeconds);
+        var rapid=exam&&exam.time?exam.time.rapidCount:0, rtot=exam&&exam.time?exam.time.total:0;
+        document.getElementById('k-rapid').textContent=fmt(rapid);
+        document.getElementById('k-rapid-pc').textContent=(rtot>0?Math.round(rapid/rtot*1000)/10:0)+'% of completed';
 
-        // status tiles
-        set('t-tput', fmt(qs.jobsLastMin));
-        set('t-queued', fmt(qs.queued));
-        set('t-oldest', qs.oldestQueuedAgeMs!=null ? 'oldest '+Math.round(qs.oldestQueuedAgeMs/1000)+'s' : '');
-        set('t-running', fmt(qs.running));
-        set('t-retry', fmt(qs.retryScheduled));
-        set('t-dead', fmt(qs.deadLetter));
-        tileClass('t-dead', (qs.deadLetter||0)>0?'tile bad':'tile');
-        if(ov) set('t-notsynced', fmt(ov.NOT_SYNCED));
-        if(health){
-          set('t-circuit', health.workspace?health.workspace.circuit:'—');
-          tileClass('t-circuit', (health.workspace&&health.workspace.circuit==='CLOSED')?'tile ok':'tile bad');
-          set('t-api', (health.calls?health.calls.successRate+'% API':''));
-        }
+        var attention = sc.filter(function(s){return s.total>0;}).sort(function(a,b){return a.completionRate-b.completionRate;}).slice(0,10)
+          .map(function(s){return {l:s.schoolName, v:s.completionRate};});
+        hbars('schools', attention, completionColor);
 
-        // sync progress
-        if(ov){
-          var total=ov.totalRegistered||0, synced=total-(ov.NOT_SYNCED||0), p=total>0?Math.round(synced/total*1000)/10:0;
-          document.getElementById('p-bar').style.width=p+'%';
-          set('p-txt', p+'%  ·  '+fmt(synced)+' / '+fmt(total)+' synced');
-        }
+        hbars('subjects', (subj.subjects||[]).slice().sort(function(a,b){return b.total-a.total;}).map(function(s){return {l:s.examSubject, v:s.completionRate!=null?s.completionRate:pct(s.COMPLETED,s.total)};}), completionColor);
 
-        // FastTest health panel
-        if(health){
-          var col=health.verdict==='HEALTHY'?'var(--good)':(health.verdict==='DEGRADED'?'var(--warn)':'var(--bad)');
-          var hv=document.getElementById('h-verdict');hv.textContent=health.verdict;hv.style.color=col;
-          set('h-success', (health.calls?health.calls.successRate+'%':'—'));
-          set('h-cpm', fmt(health.calls?health.calls.callsLastMin:0));
-          set('h-p50', (health.latency?health.latency.p50:'—')+'ms');
-          set('h-p95', (health.latency?health.latency.p95:'—')+'ms');
-          set('h-p99', (health.latency?health.latency.p99:'—')+'ms');
-          var ru=health.throughput?health.throughput.rateUtil:0;
-          var g=document.getElementById('h-rateb');g.style.width=ru+'%';g.style.background=ru>90?'var(--bad)':ru>70?'var(--warn)':'var(--info)';
-          set('h-rate', (health.throughput?health.throughput.currentRps+'/'+health.throughput.maxRps+' rps ('+ru+'%)':''));
-          lineChart(health.timeSeries);
-          // workers approximate from health? use queue running / just show from qs
-        }
+        hbars('grades', (grades.grades||[]).map(function(g){var gr=String(g.grade||'—');return {l:/grade/i.test(gr)?gr:'Grade '+gr, v:g.completionRate};}), completionColor);
 
-        set('t-failed', fmt(qs.failedLastMin||0));
-        tileClass('t-failed', (qs.failedLastMin||0)>0?'tile bad':'tile');
-
-        // queue breakdown bars
-        var qb=document.getElementById('queue');qb.innerHTML='';
-        var parts=[
-          {nm:'Queued',v:qs.queued||0,c:'#4c8dff'},
-          {nm:'Running',v:qs.running||0,c:'#f0b429'},
-          {nm:'Retry scheduled',v:qs.retryScheduled||0,c:'#9b7be8'},
-          {nm:'Dead-letter',v:qs.deadLetter||0,c:'#e05260'},
-          {nm:'Completed',v:qs.completed||0,c:'#26c281'}
+        var total=ov.totalRegistered||0;
+        var stages=[
+          {nm:'Not Started', v:(ov.NOT_STARTED||0)+(ov.NOT_SYNCED||0), c:'linear-gradient(90deg,#2563eb,#3b82f6)'},
+          {nm:'In Progress', v:ov.IN_PROGRESS||0, c:'linear-gradient(90deg,#d97706,#f59e0b)'},
+          {nm:'Completed', v:ov.COMPLETED||0, c:'linear-gradient(90deg,#16a34a,#22c55e)'}
         ];
-        var qmax=Math.max.apply(null,parts.map(function(p){return p.v;}).concat([1]));
-        parts.forEach(function(p){
-          var row=document.createElement('div');row.className='qbar';
-          row.innerHTML='<div class="top"><span>'+p.nm+'</span><b>'+fmt(p.v)+'</b></div><div class="track"><span style="width:'+Math.max(1,p.v/qmax*100)+'%;background:'+p.c+'"></span></div>';
-          qb.appendChild(row);
-        });
+        document.getElementById('funnel').innerHTML = stages.map(function(s){
+          var w=total>0?(s.v/total*100):0;
+          return '<div class="fstage"><div class="fh"><span class="muted">'+s.nm+'</span><b>'+fmt(s.v)+' <span class="dim" style="font-size:12px">'+pct(s.v,total)+'%</span></b></div>'+
+            '<div class="fbar"><span style="width:'+w+'%;background:'+s.c+'"></span></div></div>';
+        }).join('');
 
-        // recent errors
-        var eb=document.getElementById('err-body');eb.innerHTML='';
-        var errs=(health&&health.recentErrors)?health.recentErrors.slice(0,12):[];
-        set('err-n','('+errs.length+')');
-        if(!errs.length){ eb.innerHTML='<tr><td class="muted" style="padding:12px">No recent errors ✓</td></tr>'; }
-        errs.forEach(function(e){
-          var tr=document.createElement('tr');
-          tr.innerHTML='<td class="dim" style="white-space:nowrap">'+ago(e.at)+' ago</td><td class="muted">'+(e.endpoint||'')+'</td>'+
-            '<td><span class="chip">'+(e.httpStatus||'timeout')+'</span></td><td class="dim">'+((e.message||'').substring(0,70)||'—')+'</td>';
-          eb.appendChild(tr);
-        });
+        if(exam){
+          vbars('hour', (exam.byHour||[]).map(function(h){return {l:(h.hour<10?'0':'')+h.hour, v:h.count};}), 'linear-gradient(180deg,#3b82f6,#2563eb)');
+          areaChart('dailyChart', (exam.daily||[]).map(function(d){return {l:String(d.date).slice(5), v:d.count};}));
+        }
       }catch(e){}
     }
-    load(); setInterval(load,4000);
+    async function refreshHealth(){
+      try{ var h=await j('/api/fasttest/health');
+        var hp=document.getElementById('healthPill');
+        var icon=h.verdict==='HEALTHY'?'🟢':(h.verdict==='DEGRADED'?'🟡':'🔴');
+        hp.textContent=icon+' FastTest: '+h.verdict; hp.style.color=h.verdict==='HEALTHY'?'#22c55e':(h.verdict==='DEGRADED'?'#f59e0b':'#ef4444');
+      }catch(e){}
+    }
+    refresh(); refreshHealth();
+    setInterval(refresh, 6000); setInterval(refreshHealth, 8000);
   </script>
 </body>
 </html>

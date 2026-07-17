@@ -34,7 +34,7 @@
       grid-template-areas:
         "hero hero hero hero ring ring ring status status status status status"
         "hero hero hero hero ring ring ring subj subj subj subj subj"
-        "tot  tot  prog prog velo velo velo subj subj subj subj subj";}
+        "tot  tot  prog prog velo velo velo feed feed feed feed feed";}
     .tile{position:relative;overflow:hidden;min-height:0;display:flex;flex-direction:column;
       background:linear-gradient(160deg,#1a2338 0%,#131a2b 100%);border:1px solid var(--line);border-radius:20px;padding:18px 20px;
       box-shadow:0 1px 2px rgba(0,0,0,.3),0 18px 40px -22px rgba(0,0,0,.9), inset 0 0 0 1px rgba(255,255,255,.03)}
@@ -54,7 +54,18 @@
     .hero .prog>span{display:block;height:100%;background:linear-gradient(90deg,#16a34a,#22c55e);border-radius:6px;transition:width .6s ease}
     /* mid tiles */
     .ring{grid-area:ring} .status{grid-area:status} .subj{grid-area:subj}
-    .tot{grid-area:tot} .prog-t{grid-area:prog} .velo{grid-area:velo}
+    .tot{grid-area:tot} .prog-t{grid-area:prog} .velo{grid-area:velo} .feed{grid-area:feed}
+    /* live sync feed */
+    .feed .flist{overflow:hidden;display:flex;flex-direction:column;flex:1;min-height:0;margin-top:8px}
+    .feed .frow{display:grid;grid-template-columns:1fr auto auto;gap:12px;align-items:center;padding:5px 0;border-bottom:1px solid #ffffff0d}
+    .feed .frow .code{font-family:ui-monospace,Menlo,monospace;font-weight:700;font-size:14px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .feed .frow .sub{color:var(--dim);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .feed .st{padding:2px 9px;border-radius:20px;font-size:11px;font-weight:700;white-space:nowrap}
+    .feed .tm{color:var(--dim);font-size:11px;white-space:nowrap;font-variant-numeric:tabular-nums}
+    .st-NOT_SYNCED{background:#6b728022;color:#9ca3af} .st-NOT_STARTED{background:#3b82f622;color:#93c5fd}
+    .st-IN_PROGRESS{background:#f59e0b22;color:#fcd34d} .st-COMPLETED{background:#22c55e22;color:#86efac}
+    .st-UNDER_REVIEW{background:#a78bfa22;color:#c4b5fd} .st-REVIEW_FAILED{background:#ef444422;color:#fca5a5}
+    .st-UNKNOWN{background:#64748b22;color:#cbd5e1}
     /* center small KPI content so tall cards don't leave dead space */
     .tot,.prog-t{justify-content:center}
     /* hero completion trend sparkline */
@@ -85,12 +96,13 @@
     .throughput{display:flex;align-items:baseline;gap:8px;justify-content:center;margin-top:2px}
     .throughput .n{font-size:24px;font-weight:800;color:var(--good);font-variant-numeric:tabular-nums}
     /* subjects (tall) */
-    .subj .list{overflow:hidden;display:flex;flex-direction:column;gap:9px;flex:1;min-height:0}
-    .subrow{display:grid;grid-template-columns:150px 1fr 54px;align-items:center;gap:12px}
-    .subrow .nm{font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-    .track{height:14px;background:var(--plane);border-radius:8px;overflow:hidden}
-    .track > span{display:block;height:100%;background:linear-gradient(90deg,#16a34a,#22c55e);border-radius:8px;transition:width .6s ease}
-    .subrow .pc{text-align:right;font-weight:800;font-variant-numeric:tabular-nums;font-size:14px}
+    .subj .list{overflow-y:auto;display:flex;flex-direction:column;gap:5px;flex:1;min-height:0}
+    .subj .list::-webkit-scrollbar{width:6px} .subj .list::-webkit-scrollbar-thumb{background:#ffffff22;border-radius:3px}
+    .subrow{display:grid;grid-template-columns:130px 1fr 48px;align-items:center;gap:10px}
+    .subrow .nm{font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+    .track{height:11px;background:var(--plane);border-radius:6px;overflow:hidden}
+    .track > span{display:block;height:100%;background:linear-gradient(90deg,#16a34a,#22c55e);border-radius:6px;transition:width .6s ease}
+    .subrow .pc{text-align:right;font-weight:800;font-variant-numeric:tabular-nums;font-size:13px}
     /* health strip */
     .health{flex:0 0 auto;display:grid;grid-template-columns:repeat(5,1fr);gap:14px}
     .hcard{background:linear-gradient(160deg,#1a2338,#131a2b);border:1px solid var(--line);border-radius:16px;padding:14px 18px;
@@ -145,10 +157,16 @@
       <div class="seg-legend" id="legend"></div>
     </div>
 
-    <!-- Subjects (tall) -->
+    <!-- Subjects -->
     <div class="tile subj">
       <div class="cap">Completion by Subject</div>
       <div class="list" id="subjects"></div>
+    </div>
+
+    <!-- Live sync feed -->
+    <div class="tile feed">
+      <div class="cap">🔴 Live Sync Feed — latest checked codes</div>
+      <div class="flist" id="syncFeed"></div>
     </div>
 
     <!-- small KPIs -->
@@ -156,7 +174,7 @@
     <div class="tile prog-t a-inprogress"><div class="label">🔴 Testing Now</div><div class="val" id="t-inprogress">—</div><div class="sub">students taking the exam</div></div>
     <!-- Daily velocity (replaces redundant Synced tile) -->
     <div class="tile velo a-completed">
-      <div class="cap">Daily Velocity — completed / day</div>
+      <div class="cap">Daily Velocity — by actual start / day</div>
       <div class="bars" id="veloBars"></div>
     </div>
   </section>
@@ -214,11 +232,12 @@
     async function refresh(){
       try{
         var brandDot = document.querySelector('.brand .dot');
-        var ov, subj, q, health, exam;
-        try { [ov, subj, q, health, exam] = await Promise.all([
+        var ov, subj, q, health, exam, feed;
+        try { [ov, subj, q, health, exam, feed] = await Promise.all([
           j('/api/dashboard/overview'), j('/api/dashboard/subjects'),
           j('/api/queue/stats').catch(function(){return null;}), j('/api/dashboard/api-health').catch(function(){return null;}),
-          j('/api/dashboard/exam-analytics').catch(function(){return null;})
+          j('/api/dashboard/exam-analytics').catch(function(){return null;}),
+          j('/api/dashboard/sync-feed').catch(function(){return null;})
         ]); } catch(e){ brandDot.style.background='#d03b3b'; brandDot.style.boxShadow='0 0 10px #d03b3b'; return; }
         brandDot.style.background='#0ca30c'; brandDot.style.boxShadow='0 0 10px #0ca30c';
 
@@ -235,7 +254,18 @@
         // hero completion trend sparkline + daily velocity bars (from exam analytics)
         var daily = (exam && exam.daily) ? exam.daily : [];
         heroSpark(daily.map(function(d){return d.count||0;}));
-        veloBars(daily.map(function(d){return {l:d.date,v:d.count||0};}));
+        veloBars(daily.slice(-14).map(function(d){return {l:String(d.date).slice(5),v:d.count||0};}));
+
+        // live sync feed (latest checked codes + status)
+        var fl = document.getElementById('syncFeed');
+        if (feed && feed.items) {
+          fl.innerHTML = feed.items.map(function(it){
+            var st = String(it.status||'UNKNOWN');
+            return '<div class="frow"><div><div class="code">'+(it.code||'—')+'</div><div class="sub">'+(it.subject||'')+'</div></div>'+
+              '<span class="st st-'+st+'">'+st.replace(/_/g,' ')+'</span>'+
+              '<span class="tm">'+ago(it.at)+'</span></div>';
+          }).join('');
+        }
 
         // status segmented bar + legend
         var seg = document.getElementById('segbar'); var leg = document.getElementById('legend');
@@ -258,7 +288,7 @@
 
         // subjects (sorted by total desc, top 8)
         var sd = document.getElementById('subjects'); sd.innerHTML='';
-        (subj.subjects||[]).slice().sort(function(a,b){return b.total-a.total;}).slice(0,8).forEach(function(s){
+        (subj.subjects||[]).slice().sort(function(a,b){return b.total-a.total;}).forEach(function(s){
           var cr = s.completionRate!=null ? s.completionRate : pct(s.COMPLETED, s.total);
           var row=document.createElement('div'); row.className='subrow';
           row.innerHTML='<span class="nm" title="'+s.examSubject+'">'+s.examSubject+'</span>'+

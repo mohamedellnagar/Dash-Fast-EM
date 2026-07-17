@@ -92,6 +92,17 @@ export async function statusDistribution(where: Prisma.ExamRegistrationWhereInpu
   return { counts, total };
 }
 
+/** Most recently synced registrations — a live feed for the operations wall. */
+export async function recentSyncActivity(where: Prisma.ExamRegistrationWhereInput, limit = 40) {
+  const rows = await prisma.examRegistration.findMany({
+    where: { AND: [where, { lastSyncAt: { not: null } }] },
+    orderBy: { lastSyncAt: 'desc' },
+    take: limit,
+    select: { testCodeOriginal: true, dashboardStatus: true, examSubject: true, lastSyncAt: true },
+  });
+  return rows.map((r) => ({ code: r.testCodeOriginal, status: r.dashboardStatus, subject: r.examSubject, at: r.lastSyncAt }));
+}
+
 /** KPIs + charts for the executive overview (cached ~15s). */
 export function overview(where: Prisma.ExamRegistrationWhereInput) {
   return memo('overview:' + JSON.stringify(where), DASH_TTL, () => overviewUncached(where));
@@ -302,10 +313,10 @@ export async function examOperationalAnalytics(programType?: string) {
       WHERE fr.startTime IS NOT NULL AND r.deletedAt IS NULL ${prog}
       GROUP BY h ORDER BY h`,
     prisma.$queryRaw<Array<{ d: string; n: bigint }>>`
-      SELECT DATE_FORMAT(fr.startTime, '%m-%d') d, COUNT(*) n
+      SELECT DATE_FORMAT(fr.startTime, '%Y-%m-%d') d, COUNT(*) n
       FROM FastTestResult fr JOIN ExamRegistration r ON r.id = fr.registrationId
       WHERE fr.startTime IS NOT NULL AND r.deletedAt IS NULL ${prog}
-      GROUP BY d ORDER BY d DESC LIMIT 14`,
+      GROUP BY d ORDER BY d DESC LIMIT 45`,
   ]);
 
   const r0 = rapid[0] ?? { rapid: 0n, total: 0n, avgs: 0 };
