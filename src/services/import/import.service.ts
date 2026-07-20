@@ -2,6 +2,7 @@ import * as XLSX from 'xlsx';
 import { prisma } from '../../db/prisma';
 import { buildTestCode } from '../../lib/testcode';
 import { logger } from '../../lib/logger';
+import { normalizeGrade } from '../../lib/grade';
 import { normalizeAlias, resolveWorkspaceBySubject } from '../workspace.service';
 
 // Columns expected in the source template. Matching is case/space-insensitive.
@@ -217,7 +218,7 @@ export async function commitImport(
           examSubject: r.ExamSubject,
           examName: r.ExamName || null,
           programType: programType || null,
-          grade: r.Grade || null,
+          grade: normalizeGrade(r.Grade),
           classCode: r.ClassCode || null,
           startDate: r.StartDate || null,
           endDate: r.EndDate || null,
@@ -317,7 +318,7 @@ async function upsertStudent(r: RawRow, schoolId?: string) {
       nameArabic: r.NameArabic || null,
       nameEnglish: r.NameEnglish || null,
       emiratesId: r.EmiratesId || null,
-      grade: r.Grade || null,
+      grade: normalizeGrade(r.Grade),
       classCode: r.ClassCode || null,
       schoolId: schoolId ?? null,
     },
@@ -325,7 +326,7 @@ async function upsertStudent(r: RawRow, schoolId?: string) {
       nameArabic: r.NameArabic || undefined,
       nameEnglish: r.NameEnglish || undefined,
       emiratesId: r.EmiratesId || undefined,
-      grade: r.Grade || undefined,
+      grade: normalizeGrade(r.Grade) ?? undefined,
       classCode: r.ClassCode || undefined,
       schoolId: schoolId ?? undefined,
     },

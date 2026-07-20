@@ -92,6 +92,27 @@ export async function statusDistribution(where: Prisma.ExamRegistrationWhereInpu
   return { counts, total };
 }
 
+/** Participation coverage: how many of the targeted schools/students actually
+ * participated (started the exam). "Participating" = has a started status. */
+export async function participationCoverage(programType?: string) {
+  const prog = programType ? Prisma.sql`AND r.programType = ${programType}` : Prisma.empty;
+  const rows = await prisma.$queryRaw<Array<{ ts: bigint; ps: bigint; tst: bigint; pst: bigint }>>`
+    SELECT
+      COUNT(DISTINCT r.schoolId) ts,
+      COUNT(DISTINCT CASE WHEN r.dashboardStatus IN ('COMPLETED','IN_PROGRESS','UNDER_REVIEW','REVIEW_FAILED') THEN r.schoolId END) ps,
+      COUNT(DISTINCT r.emiratesId) tst,
+      COUNT(DISTINCT CASE WHEN r.dashboardStatus IN ('COMPLETED','IN_PROGRESS','UNDER_REVIEW','REVIEW_FAILED') THEN r.emiratesId END) pst
+    FROM ExamRegistration r
+    WHERE r.deletedAt IS NULL ${prog}`;
+  const r = rows[0] ?? { ts: 0n, ps: 0n, tst: 0n, pst: 0n };
+  const ts = Number(r.ts), ps = Number(r.ps), tst = Number(r.tst), pst = Number(r.pst);
+  const rate = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 100) : 0);
+  return {
+    schools: { targeted: ts, participating: ps, rate: rate(ps, ts) },
+    students: { targeted: tst, participating: pst, rate: rate(pst, tst) },
+  };
+}
+
 /** Schools whose students' statuses changed TODAY, with the grades touched per
  * school. Powers the "Today's Activity" panel on the operations wall. */
 export async function todaysActivity(where: Prisma.ExamRegistrationWhereInput) {

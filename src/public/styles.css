@@ -17,7 +17,15 @@ body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Ro
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
 .app { display: flex; min-height: 100vh; }
-.sidebar { width: 230px; background: var(--panel); border-right: 1px solid var(--line); padding: 18px 0; flex-shrink: 0; }
+/* Sidebar stays pinned to the viewport; only its link list scrolls, so the page
+   content never has to scroll past a very tall menu. */
+.sidebar { width: 230px; background: var(--panel); border-right: 1px solid var(--line); padding: 18px 0 0; flex-shrink: 0;
+  position: sticky; top: 0; align-self: flex-start; height: 100vh; display: flex; flex-direction: column; }
+.sidebar .nav { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding-bottom: 14px; overscroll-behavior: contain; }
+.sidebar .nav::-webkit-scrollbar { width: 7px; }
+.sidebar .nav::-webkit-scrollbar-thumb { background: #ffffff1f; border-radius: 4px; }
+.sidebar .nav::-webkit-scrollbar-thumb:hover { background: #ffffff33; }
+.sidebar .brand, .sidebar .year-picker, .sidebar .program-picker { flex: 0 0 auto; }
 .brand { font-weight: 700; font-size: 16px; padding: 0 20px 16px; color: #fff; letter-spacing: .3px; }
 .brand small { display:block; color: var(--muted); font-weight: 400; font-size: 11px; }
 .nav a { display: block; padding: 9px 20px; color: var(--muted); border-left: 3px solid transparent; }

@@ -33,7 +33,7 @@ dashboardRouter.get('/wall', requireAuth, requirePermission(PERMISSION.DASHBOARD
 });
 
 // ABA Analytics wall removed — redirect to Exam Operations.
-dashboardRouter.get('/wall/aba', requireAuth, (_req, res) => res.redirect('/wall/exam'));
+dashboardRouter.get('/wall/aba', requireAuth, (_req, res) => res.redirect('/ops'));
 
 // Operations — in-app page that embeds the ops wall; full-screen at /wall/ops.
 dashboardRouter.get('/ops', requireAuth, requirePermission(PERMISSION.QUEUE_VIEW), async (req, res) => {
@@ -45,20 +45,8 @@ dashboardRouter.get('/wall/ops', requireAuth, requirePermission(PERMISSION.QUEUE
   res.render('ops-wall', { title: 'Operations', principal: req.principal, nav: 'ops-wall' });
 });
 
-// Exam Operations — in-app page (sidebar layout) that embeds the wall; the wall
-// itself stays available full-screen at /wall/exam (opened in a new tab).
-dashboardRouter.get('/exam', requireAuth, requirePermission(PERMISSION.DASHBOARD_VIEW), async (req, res) => {
-  res.render('exam-ops-embed', { title: 'Exam Operations ABA', principal: req.principal, nav: 'exam-ops-wall' });
-});
-
-// Full-screen live EXAM OPERATIONS wall — business view for running the exam
-// operation: completion progress, live activity, school participation, follow-up.
-dashboardRouter.get('/wall/exam', requireAuth, requirePermission(PERMISSION.DASHBOARD_VIEW), async (req, res) => {
-  res.render('exam-ops-wall', { title: 'Exam Operations ABA', principal: req.principal, nav: 'exam-ops-wall' });
-});
-
-// ABA Schools wall removed — redirect to Exam Operations.
-dashboardRouter.get('/wall/schools', requireAuth, (_req, res) => res.redirect('/wall/exam'));
+// Exam Operations ABA removed — its routes now land on the Operations Center.
+dashboardRouter.get(['/exam', '/wall/exam', '/wall/schools'], requireAuth, (_req, res) => res.redirect('/ops'));
 
 // Executive Dashboard removed — root now lands on Live Monitoring.
 dashboardRouter.get('/', requireAuth, async (_req, res) => {

@@ -35,7 +35,6 @@
       <% if (showScreens) { %>
         <div class="nav-group">Live Screens</div>
         <% if (can('dashboard:view')) { %><a href="/overview" class="<%= nav==='wall'?'active':'' %>">📺 Live Overview</a><% } %>
-        <% if (can('dashboard:view') && isABA) { %><a href="/exam" class="<%= nav==='exam-ops-wall'?'active':'' %>">📋 Exam Operations ABA</a><% } %>
         <% if (can('queue:view')) { %><a href="/ops" class="<%= nav==='ops-wall'?'active':'' %>">🖥️ Operations Center</a><% } %>
       <% } %>
 

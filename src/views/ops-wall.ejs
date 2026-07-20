@@ -30,16 +30,32 @@
     .kpi .s{font-size:12px;color:var(--dim);margin-top:4px}
     .kpi.now::after{background:var(--warn)} .kpi.now .v{color:var(--warn)}
     .kpi.done::after{background:var(--ok)} .kpi.done .v{color:var(--ok)}
-    .kpi.rapid::after{background:var(--bad)} .kpi.rapid .v{color:var(--bad)}
-    .board{flex:1 1 auto;display:grid;gap:14px;min-height:0;grid-template-columns:repeat(12,1fr);grid-template-rows:1fr 1fr 0.9fr;
+    .kpi.rapid::after{background:var(--bad)} .kpi.rapid .v{color:var(--bad)} .kpi.rapid{grid-column:span 2}
+    /* participation group cards (targeted vs participating + achieved gauge) */
+    .pgroup{grid-column:span 2;background:linear-gradient(160deg,#1a2338,#131a2b);border:1px solid var(--line);border-radius:16px;padding:12px 18px;display:flex;flex-direction:column}
+    .pgl{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:8px}
+    .pgb{display:flex;align-items:center;gap:16px;flex:1}
+    .pgn{font-size:clamp(20px,2.2vw,30px);font-weight:800;font-variant-numeric:tabular-nums;line-height:1}
+    .pgt{font-size:11px;color:var(--dim);margin-top:3px}
+    .pgsep{width:1px;align-self:stretch;background:var(--line)}
+    .gauge{position:relative;width:58px;height:58px;flex:0 0 auto;margin-left:auto}
+    .gauge svg{width:100%;height:100%;transform:rotate(-90deg)}
+    .gauge .g-bg{fill:none;stroke:#26324a;stroke-width:3.4}
+    .gauge .g-fg{fill:none;stroke-width:3.4;stroke-linecap:round;stroke-dasharray:100;stroke-dashoffset:100;transition:stroke-dashoffset .6s ease}
+    .gauge .gpc{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800}
+    .gauge .gcap{position:absolute;left:0;right:0;bottom:-15px;text-align:center;font-size:9px;color:var(--dim);text-transform:uppercase;letter-spacing:.4px}
+    .board{flex:1 1 auto;display:grid;gap:14px;min-height:0;grid-template-columns:repeat(12,1fr);grid-template-rows:1fr 1fr;
       grid-template-areas:
         "schools schools schools schools funnel funnel funnel funnel subj subj subj subj"
-        "schools schools schools schools grade grade grade grade subj subj subj subj"
-        "hour hour hour hour hour hour daily daily daily daily daily daily";}
+        "schools schools schools schools grade grade grade grade time time time time";}
     .tile{background:linear-gradient(160deg,#1a2338,#131a2b);border:1px solid var(--line);border-radius:18px;padding:16px 18px;display:flex;flex-direction:column;min-height:0;
       box-shadow:0 18px 40px -22px rgba(0,0,0,.9)}
     .tile .cap{font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--muted);margin-bottom:12px;flex:0 0 auto}
-    .schools{grid-area:schools} .funnel{grid-area:funnel} .subj{grid-area:subj} .grade{grid-area:grade} .hour{grid-area:hour} .daily{grid-area:daily}
+    .schools{grid-area:schools} .funnel{grid-area:funnel} .subj{grid-area:subj} .grade{grid-area:grade} .hour{grid-area:hour} .daily{grid-area:daily} .time{grid-area:time}
+    /* time & integrity: rapid-completion flag + time-used distribution */
+    .flag{display:flex;align-items:center;gap:10px;background:#ef444414;border:1px solid #ef444433;border-radius:10px;padding:9px 12px;margin-bottom:8px;flex:0 0 auto}
+    .flag .big{font-size:24px;font-weight:800;color:#ef4444;font-variant-numeric:tabular-nums}
+    .time .vbars{overflow:hidden}
     .hlist{overflow-y:auto;display:flex;flex-direction:column;gap:6px;flex:1;min-height:0}
     .hlist::-webkit-scrollbar{width:6px} .hlist::-webkit-scrollbar-thumb{background:#ffffff22;border-radius:3px}
     .hrow{display:grid;grid-template-columns:130px 1fr 46px;align-items:center;gap:10px}
@@ -47,6 +63,23 @@
     .hrow .track{height:11px;background:var(--plane);border-radius:6px;overflow:hidden}
     .hrow .track > span{display:block;height:100%;border-radius:6px;transition:width .6s ease}
     .hrow .pc{text-align:right;font-weight:800;font-size:13px;font-variant-numeric:tabular-nums}
+    /* completion-threshold filter buttons on the schools tile */
+    .fbtns{display:flex;gap:6px;flex:0 0 auto;margin-bottom:8px;flex-wrap:wrap}
+    .fbtns button{cursor:pointer;font:inherit;font-size:11px;font-weight:700;padding:4px 11px;border-radius:999px;
+      border:1px solid var(--line);background:var(--surface);color:var(--muted);transition:.15s}
+    .fbtns button:hover{color:var(--ink);border-color:#ffffff33}
+    .fbtns button.on{background:#3b82f622;border-color:#3b82f688;color:#93c5fd}
+    .cap .scount{float:right;font-weight:800;color:var(--dim);text-transform:none;letter-spacing:0}
+    /* funnel: subject chips live in a vertical rail beside the bars, not stacked above them */
+    .funnel .fbody{display:flex;gap:12px;flex:1;min-height:0}
+    #funFilters{flex-direction:column;gap:3px;margin:0;flex:0 0 74px;overflow-y:auto;align-content:flex-start}
+    #funFilters::-webkit-scrollbar{width:5px} #funFilters::-webkit-scrollbar-thumb{background:#ffffff22;border-radius:3px}
+    #funFilters button{padding:4px 6px;font-size:10px;letter-spacing:.3px;width:100%;flex:0 0 auto}
+    .funnel #funnel{display:flex;flex-direction:column;justify-content:center;gap:10px;min-height:0;flex:1}
+    .funnel .fstage{margin-bottom:0}
+    .funnel .fstage .fh b{font-size:17px}
+    .funnel .fstage .fbar{height:13px}
+    .hlist .empty{color:var(--dim);font-size:13px;padding:10px 2px}
     .fstage{margin-bottom:14px} .fstage:last-child{margin-bottom:0}
     .fstage .fh{display:flex;justify-content:space-between;align-items:baseline;font-size:13px;margin-bottom:5px}
     .fstage .fh b{font-size:20px;font-variant-numeric:tabular-nums}
@@ -68,22 +101,55 @@
   </header>
 
   <section class="kpis">
-    <div class="kpi"><div class="l">Schools</div><div class="v" id="k-schools">—</div><div class="s" id="k-schools-done">—</div></div>
-    <div class="kpi"><div class="l">Students</div><div class="v" id="k-students">—</div><div class="s" id="k-regs">—</div></div>
-    <div class="kpi done"><div class="l">Completion</div><div class="v" id="k-compl">—</div><div class="s">overall</div></div>
-    <div class="kpi now"><div class="l">🔴 Testing Now</div><div class="v" id="k-now">—</div><div class="s">in the exam</div></div>
-    <div class="kpi"><div class="l">Avg Time</div><div class="v" id="k-time">—</div><div class="s">per exam</div></div>
+    <!-- Schools participation -->
+    <div class="pgroup">
+      <div class="pgl">🏫 Schools Participation</div>
+      <div class="pgb">
+        <div><div class="pgn" id="pSchP">—</div><div class="pgt">Participating</div></div>
+        <div class="pgsep"></div>
+        <div><div class="pgn" id="pSchT" style="color:var(--muted)">—</div><div class="pgt">Targeted</div></div>
+        <div class="gauge">
+          <svg viewBox="0 0 36 36"><circle class="g-bg" cx="18" cy="18" r="15.9155"></circle><circle class="g-fg" id="gSch" cx="18" cy="18" r="15.9155"></circle></svg>
+          <span class="gpc" id="pSchR">—</span><span class="gcap">achieved</span>
+        </div>
+      </div>
+    </div>
+    <!-- Students participation -->
+    <div class="pgroup">
+      <div class="pgl">👥 Students Participation</div>
+      <div class="pgb">
+        <div><div class="pgn" id="pStuP">—</div><div class="pgt">Participating</div></div>
+        <div class="pgsep"></div>
+        <div><div class="pgn" id="pStuT" style="color:var(--muted)">—</div><div class="pgt">Targeted</div></div>
+        <div class="gauge">
+          <svg viewBox="0 0 36 36"><circle class="g-bg" cx="18" cy="18" r="15.9155"></circle><circle class="g-fg" id="gStu" cx="18" cy="18" r="15.9155"></circle></svg>
+          <span class="gpc" id="pStuR">—</span><span class="gcap">achieved</span>
+        </div>
+      </div>
+    </div>
+    <!-- kept exam metrics -->
     <div class="kpi rapid"><div class="l">⚠ Rapid (&lt;2m)</div><div class="v" id="k-rapid">—</div><div class="s" id="k-rapid-pc">needs review</div></div>
   </section>
 
   <section class="board">
     <div class="tile schools">
-      <div class="cap">🏫 Schools Needing Attention — lowest completion</div>
+      <div class="cap">🏫 Schools Needing Attention — lowest completion
+        <span class="scount" id="schCount"></span>
+      </div>
+      <div class="fbtns" id="schFilters">
+        <button type="button" data-max="100" class="on">All</button>
+        <button type="button" data-max="80">&lt; 80%</button>
+        <button type="button" data-max="50">&lt; 50%</button>
+        <button type="button" data-max="30">&lt; 30%</button>
+      </div>
       <div class="hlist" id="schools"></div>
     </div>
     <div class="tile funnel">
-      <div class="cap">Exam Status Funnel</div>
-      <div id="funnel" style="flex:1"></div>
+      <div class="cap">Exam Status Funnel<span class="scount" id="funScope">All subjects</span></div>
+      <div class="fbody">
+        <div class="fbtns" id="funFilters"></div>
+        <div id="funnel"></div>
+      </div>
     </div>
     <div class="tile grade">
       <div class="cap">Completion by Grade</div>
@@ -93,13 +159,14 @@
       <div class="cap">Completion by Subject</div>
       <div class="hlist" id="subjects"></div>
     </div>
-    <div class="tile hour">
-      <div class="cap">Activity by Hour of Day</div>
-      <div class="vbars" id="hour"></div>
-    </div>
-    <div class="tile daily">
-      <div class="cap">Daily Velocity — exams started per day</div>
-      <svg id="dailyChart" style="width:100%;flex:1;min-height:0;display:block"></svg>
+    <div class="tile time">
+      <div class="cap">⏱️ Time &amp; Integrity</div>
+      <div class="flag">
+        <span class="big" id="t-rapid">—</span>
+        <div><div style="font-weight:700;font-size:13px">Rapid completions</div>
+          <div class="dim" style="font-size:11.5px" id="t-rapid-sub">finished &lt; 2 min — review</div></div>
+      </div>
+      <div class="vbars" id="timeDist"></div>
     </div>
   </section>
 
@@ -124,16 +191,23 @@
     function vbars(el,items,color){
       var box=document.getElementById(el);box.innerHTML='';
       var max=Math.max.apply(null,items.map(function(i){return i.v;}).concat([1]));
-      var avail=Math.max(30,(box.clientHeight||140)-16);
+      // reserve room for the value label above and the axis label below each bar
+      var avail=Math.max(24,(box.clientHeight||140)-34);
       items.forEach(function(i){
         var b=document.createElement('div');b.className='b';
         b.innerHTML='<div class="bv">'+(i.v>=1000?Math.round(i.v/1000)+'k':i.v)+'</div>'+
-          '<div class="bar" style="height:'+Math.max(3,Math.round(i.v/max*avail))+'px;background:'+color+'" title="'+i.l+': '+fmt(i.v)+'"></div>'+
+          '<div class="bar" style="height:'+Math.max(3,Math.round(i.v/max*avail))+'px;background:'+(typeof color==='function'?color(i):color)+'" title="'+i.l+': '+fmt(i.v)+'"></div>'+
           '<div class="bl">'+i.l+'</div>';
         box.appendChild(b);
       });
     }
     function completionColor(v){ return v>=80?'linear-gradient(90deg,#16a34a,#22c55e)':v>=50?'linear-gradient(90deg,#d97706,#f59e0b)':'linear-gradient(90deg,#dc2626,#ef4444)'; }
+    function gauge(circleId, pctId, pct){
+      var c=document.getElementById(circleId), t=document.getElementById(pctId); if(!c) return;
+      var col = pct>=90?'#22c55e':pct>=70?'#f59e0b':'#ef4444';
+      c.style.stroke=col; c.style.strokeDashoffset=(100-Math.max(0,Math.min(100,pct))).toFixed(1);
+      if(t){ t.textContent=pct+'%'; t.style.color=col; }
+    }
     var SVGNS='http://www.w3.org/2000/svg';
     function areaChart(el, items){
       var svg=document.getElementById(el); if(!svg||!items.length) return; svg.innerHTML='';
@@ -157,53 +231,122 @@
       for(var t=0;t<=ticks;t++){var i=Math.round(t/ticks*(n-1));var tx=mk('text',{x:x(i),y:H-5,fill:'#8a897f','font-size':'10','text-anchor':(i===0?'start':i===n-1?'end':'middle')});tx.textContent=items[i].l;svg.appendChild(tx);}
     }
 
+    // Schools tile: keep the full list client-side and filter by completion threshold.
+    var allSchools = [], schMax = 100;
+    function renderSchools(){
+      var rows = allSchools.filter(function(s){ return s.completionRate < schMax; });
+      var cnt = document.getElementById('schCount');
+      cnt.textContent = rows.length + (schMax<100 ? ' of '+allSchools.length : '') + ' schools';
+      if(!rows.length){ document.getElementById('schools').innerHTML='<div class="empty">No schools below '+schMax+'% completion. 🎉</div>'; return; }
+      hbars('schools', rows.map(function(s){return {l:s.schoolName, v:s.completionRate};}), completionColor);
+    }
+    document.getElementById('schFilters').addEventListener('click', function(e){
+      var b = e.target.closest('button'); if(!b) return;
+      schMax = Number(b.dataset.max);
+      [].forEach.call(this.children, function(c){ c.classList.toggle('on', c===b); });
+      renderSchools();
+    });
+
+    // ---- Exam Status Funnel: multi-select subject filter ----
+    // Subject names are long ("parent questions En"), so chips show a short label
+    // and keep the full name in the tooltip.
+    function shortSubject(name){
+      var s=String(name||'—').trim();
+      return s
+        .replace(/^Arabic\s+Reading$/i,'AR-R').replace(/^Arabic\s+Writing$/i,'AR-W')
+        .replace(/^English\s+Reading$/i,'EN-R').replace(/^English\s+Writing$/i,'EN-W')
+        .replace(/^Baseline\s+Arabic\s*(\d+)$/i,'BAR$1')
+        .replace(/^parent questions\s*En$/i,'PQ-EN').replace(/^parent questions$/i,'PQ')
+        .replace(/^Observation form$/i,'OBS')
+        .replace(/^Math(ematics)?$/i,'MATH');
+    }
+    var allSubjects = [], funSel = new Set(); // empty set = all subjects
+
+    function renderFunFilters(){
+      var box=document.getElementById('funFilters');
+      var want = allSubjects.map(function(s){return s.examSubject;}).join('|');
+      if(box.dataset.keys===want) { syncFunBtns(); return; } // rebuild only when subjects change
+      box.dataset.keys=want;
+      box.innerHTML='<button type="button" data-all="1" class="on">All</button>'+
+        allSubjects.map(function(s){
+          return '<button type="button" data-s="'+s.examSubject.replace(/"/g,'&quot;')+'" title="'+s.examSubject+'">'+shortSubject(s.examSubject)+'</button>';
+        }).join('');
+    }
+    function syncFunBtns(){
+      var box=document.getElementById('funFilters');
+      [].forEach.call(box.children,function(b){
+        b.classList.toggle('on', b.dataset.all ? funSel.size===0 : funSel.has(b.dataset.s));
+      });
+    }
+    function renderFunnel(){
+      var rows = funSel.size ? allSubjects.filter(function(s){return funSel.has(s.examSubject);}) : allSubjects;
+      var agg = rows.reduce(function(a,s){
+        a.total+=s.total||0; a.ns+=(s.NOT_STARTED||0)+(s.NOT_SYNCED||0); a.ip+=s.IN_PROGRESS||0; a.co+=s.COMPLETED||0; return a;
+      },{total:0,ns:0,ip:0,co:0});
+      document.getElementById('funScope').textContent =
+        (funSel.size ? funSel.size+' subject'+(funSel.size>1?'s':'') : 'All subjects')+' · '+fmt(agg.total);
+      var stages=[
+        {nm:'Not Started', v:agg.ns, c:'linear-gradient(90deg,#2563eb,#3b82f6)'},
+        {nm:'In Progress', v:agg.ip, c:'linear-gradient(90deg,#d97706,#f59e0b)'},
+        {nm:'Completed',   v:agg.co, c:'linear-gradient(90deg,#16a34a,#22c55e)'}
+      ];
+      document.getElementById('funnel').innerHTML = stages.map(function(s){
+        var w=agg.total>0?(s.v/agg.total*100):0;
+        return '<div class="fstage"><div class="fh"><span class="muted">'+s.nm+'</span><b>'+fmt(s.v)+' <span class="dim" style="font-size:12px">'+pct(s.v,agg.total)+'%</span></b></div>'+
+          '<div class="fbar"><span style="width:'+w+'%;background:'+s.c+'"></span></div></div>';
+      }).join('');
+      syncFunBtns();
+    }
+    document.getElementById('funFilters').addEventListener('click', function(e){
+      var b=e.target.closest('button'); if(!b) return;
+      if(b.dataset.all) funSel.clear();
+      else if(funSel.has(b.dataset.s)) funSel.delete(b.dataset.s);
+      else funSel.add(b.dataset.s);
+      renderFunnel();
+    });
+
     async function refresh(){
       try{
-        var ov, schools, subj, grades, exam;
-        [ov, schools, subj, grades, exam] = await Promise.all([
+        var ov, schools, subj, grades, exam, part;
+        [ov, schools, subj, grades, exam, part] = await Promise.all([
           j('/api/dashboard/overview'),
           j('/api/dashboard/schools').catch(function(){return {schools:[]};}),
           j('/api/dashboard/subjects').catch(function(){return {subjects:[]};}),
           j('/api/dashboard/completion-by-grade').catch(function(){return {grades:[]};}),
-          j('/api/dashboard/exam-analytics').catch(function(){return null;})
+          j('/api/dashboard/exam-analytics').catch(function(){return null;}),
+          j('/api/dashboard/participation').catch(function(){return null;})
         ]);
 
         var sc = schools.schools||[];
-        var doneSchools = sc.filter(function(s){return s.completionRate>=100;}).length;
-        document.getElementById('k-schools').textContent=fmt(sc.length);
-        document.getElementById('k-schools-done').textContent=fmt(doneSchools)+' fully complete';
-        document.getElementById('k-students').textContent=fmt(ov.studentCount);
-        document.getElementById('k-regs').textContent=fmt(ov.totalRegistered)+' registrations';
-        document.getElementById('k-compl').textContent=(ov.completionRate!=null?ov.completionRate+'%':'—');
-        document.getElementById('k-now').textContent=fmt(ov.IN_PROGRESS);
-        document.getElementById('k-time').textContent=mmss(ov.avgTimeUsedSeconds);
+        // Participation: targeted vs participating + achieved gauge
+        if (part) {
+          document.getElementById('pSchP').textContent=fmt(part.schools.participating);
+          document.getElementById('pSchT').textContent='of '+fmt(part.schools.targeted);
+          document.getElementById('pStuP').textContent=fmt(part.students.participating);
+          document.getElementById('pStuT').textContent='of '+fmt(part.students.targeted);
+          gauge('gSch','pSchR',part.schools.rate);
+          gauge('gStu','pStuR',part.students.rate);
+        }
         var rapid=exam&&exam.time?exam.time.rapidCount:0, rtot=exam&&exam.time?exam.time.total:0;
         document.getElementById('k-rapid').textContent=fmt(rapid);
         document.getElementById('k-rapid-pc').textContent=(rtot>0?Math.round(rapid/rtot*1000)/10:0)+'% of completed';
 
-        var attention = sc.filter(function(s){return s.total>0;}).sort(function(a,b){return a.completionRate-b.completionRate;}).slice(0,10)
-          .map(function(s){return {l:s.schoolName, v:s.completionRate};});
-        hbars('schools', attention, completionColor);
+        allSchools = sc.filter(function(s){return s.total>0;}).sort(function(a,b){return a.completionRate-b.completionRate;});
+        renderSchools();
 
         hbars('subjects', (subj.subjects||[]).slice().sort(function(a,b){return b.total-a.total;}).map(function(s){return {l:s.examSubject, v:s.completionRate!=null?s.completionRate:pct(s.COMPLETED,s.total)};}), completionColor);
 
         hbars('grades', (grades.grades||[]).map(function(g){var gr=String(g.grade||'—');return {l:/grade/i.test(gr)?gr:'Grade '+gr, v:g.completionRate};}), completionColor);
 
-        var total=ov.totalRegistered||0;
-        var stages=[
-          {nm:'Not Started', v:(ov.NOT_STARTED||0)+(ov.NOT_SYNCED||0), c:'linear-gradient(90deg,#2563eb,#3b82f6)'},
-          {nm:'In Progress', v:ov.IN_PROGRESS||0, c:'linear-gradient(90deg,#d97706,#f59e0b)'},
-          {nm:'Completed', v:ov.COMPLETED||0, c:'linear-gradient(90deg,#16a34a,#22c55e)'}
-        ];
-        document.getElementById('funnel').innerHTML = stages.map(function(s){
-          var w=total>0?(s.v/total*100):0;
-          return '<div class="fstage"><div class="fh"><span class="muted">'+s.nm+'</span><b>'+fmt(s.v)+' <span class="dim" style="font-size:12px">'+pct(s.v,total)+'%</span></b></div>'+
-            '<div class="fbar"><span style="width:'+w+'%;background:'+s.c+'"></span></div></div>';
-        }).join('');
+        allSubjects = (subj.subjects||[]).slice().sort(function(a,b){return b.total-a.total;});
+        renderFunFilters();
+        renderFunnel();
 
-        if(exam){
-          vbars('hour', (exam.byHour||[]).map(function(h){return {l:(h.hour<10?'0':'')+h.hour, v:h.count};}), 'linear-gradient(180deg,#3b82f6,#2563eb)');
-          areaChart('dailyChart', (exam.daily||[]).map(function(d){return {l:String(d.date).slice(5), v:d.count};}));
+        if(exam && exam.time){
+          document.getElementById('t-rapid').textContent=fmt(exam.time.rapidCount);
+          document.getElementById('t-rapid-sub').textContent='of '+fmt(exam.time.total)+' · '+pct(exam.time.rapidCount,exam.time.total)+'% · avg '+Math.round((exam.time.avgSeconds||0)/60)+'m/exam';
+          vbars('timeDist', (exam.time.distribution||[]).map(function(b){return {l:b.label, v:b.count};}),
+            function(i){return i.l==='<2m'?'linear-gradient(180deg,#ef4444,#dc2626)':'linear-gradient(180deg,#4c8dff,#9b7be8)';});
         }
       }catch(e){}
     }

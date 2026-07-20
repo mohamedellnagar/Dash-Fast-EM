@@ -21,6 +21,10 @@ dashboardApiRouter.get('/overview', view, asyncHandler(async (req, res) => {
   res.json(await dash.overview(where));
 }));
 
+dashboardApiRouter.get('/participation', view, asyncHandler(async (req, res) => {
+  res.json(await dash.participationCoverage(String(req.query.programType || '') || undefined));
+}));
+
 dashboardApiRouter.get('/todays-activity', view, asyncHandler(async (req, res) => {
   const { where } = whereFrom(req);
   res.json(await dash.todaysActivity(where));
