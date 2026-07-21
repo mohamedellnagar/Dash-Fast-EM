@@ -104,9 +104,31 @@ export function computeScheduling(reg: RegForSchedule, nowMs: number): Schedulin
  * via queue dedup, so running this on multiple workers is safe. Skips paused /
  * sync-disabled / inactive workspaces.
  */
+/**
+ * Attach the single active workspace to any registration that imported without
+ * one. Registrations route to a workspace by ExamName at import time; if no
+ * alias mapping matched (and there's one workspace for everything), they land
+ * with workspaceId=null and the scheduler skips them forever. When exactly one
+ * active workspace exists, adopt those orphans so sync can proceed. No-op once
+ * there are none, and a no-op when 0 or 2+ workspaces exist (ambiguous).
+ */
+export async function backfillOrphanWorkspaces(): Promise<number> {
+  const actives = await prisma.fastTestWorkspace.findMany({
+    where: { isActive: true, deletedAt: null }, take: 2, select: { id: true },
+  });
+  if (actives.length !== 1) return 0;
+  const res = await prisma.examRegistration.updateMany({
+    where: { workspaceId: null, deletedAt: null },
+    data: { workspaceId: actives[0].id },
+  });
+  return res.count;
+}
+
 export async function enqueueDueJobs(now: () => number = () => Date.now(), limit = 2000): Promise<{ enqueued: number; deduped: number }> {
   // Respect the global on/off switch and time window — don't pile up jobs while paused.
   if (!(await syncAllowedNow(now))) return { enqueued: 0, deduped: 0 };
+  // Adopt any workspace-less registrations first (single-workspace deployments).
+  await backfillOrphanWorkspaces().catch(() => 0);
   const nowDate = new Date(now());
   const [pausedSubs, pausedYears, mode] = await Promise.all([pausedSubjects(), pausedAcademicYears(), getSyncMode()]);
 

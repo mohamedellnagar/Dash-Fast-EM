@@ -42,6 +42,18 @@ export async function resolveWorkspaceBySubject(examSubject: string): Promise<Re
     });
   }
 
+  // Single-workspace fallback: when exactly one active workspace exists, route
+  // every subject to it. This covers deployments that use one FastTest
+  // workspace for all subjects and haven't set per-subject alias mappings —
+  // otherwise unmapped subjects resolve to null and never sync.
+  if (!workspace) {
+    const actives = await prisma.fastTestWorkspace.findMany({
+      where: { isActive: true, deletedAt: null },
+      take: 2,
+    });
+    if (actives.length === 1) workspace = actives[0];
+  }
+
   if (!workspace || !workspace.isActive || workspace.deletedAt) return null;
 
   return decryptWorkspace(workspace);
