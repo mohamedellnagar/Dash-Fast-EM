@@ -6,16 +6,25 @@
 <div class="panel">
   <h2>FastTest Workspaces</h2>
   <table>
-    <thead><tr><th>Workspace</th><th>Subject</th><th>Base URL</th><th>API Key</th><th>Active</th><th>Sync</th><th>Last Auth</th><th></th></tr></thead>
+    <thead><tr><th>Workspace</th><th>Subject</th><th>Base URL</th><th>API Key</th><th>Active</th><th>Sync</th><th>Rate limit (per workspace)</th><th>Last Auth</th><th></th></tr></thead>
     <tbody>
       <% workspaces.forEach(function(w){ %>
         <tr>
           <td><%= w.workspaceName %></td>
           <td><%= w.subjectCode %></td>
-          <td class="mono" style="max-width:220px;overflow:hidden;text-overflow:ellipsis"><%= w.baseUrl %></td>
+          <td class="mono" style="max-width:200px;overflow:hidden;text-overflow:ellipsis"><%= w.baseUrl %></td>
           <td class="mono"><%= w.hasApiKey ? w.restApiKeyMasked : '(none)' %></td>
           <td><%= w.isActive ? 'Yes' : 'No' %></td>
           <td><%= w.syncEnabled ? 'On' : 'Off' %></td>
+          <td>
+            <form class="rate-form" data-id="<%= w.id %>" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0">
+              <label style="font-size:11px;color:var(--muted)" title="Requests per minute (main throughput cap)">rpm <input name="maxRpm" type="number" min="1" max="6000" value="<%= w.rateLimit.maxRpm %>" style="width:64px" required></label>
+              <label style="font-size:11px;color:var(--muted)" title="Requests per second (burst cap)">rps <input name="maxRps" type="number" min="0.1" max="100" step="0.1" value="<%= w.rateLimit.maxRps %>" style="width:52px" required></label>
+              <label style="font-size:11px;color:var(--muted)" title="Max concurrent in-flight requests">conc <input name="maxConcurrent" type="number" min="1" max="64" value="<%= w.rateLimit.maxConcurrent %>" style="width:48px" required></label>
+              <button class="btn sm" type="submit">Save</button>
+              <% if (w.rateLimit.isDefault) { %><span class="muted" style="font-size:10px">(default)</span><% } %>
+            </form>
+          </td>
           <td>
             <% if (w.lastAuthenticationStatus) { %>
               <span class="status <%= w.lastAuthenticationStatus==='SUCCESS'?'OK':'ERROR' %>"><%= w.lastAuthenticationStatus %></span>
@@ -25,7 +34,7 @@
           <td><button class="btn secondary sm test-btn" data-id="<%= w.id %>">Test</button></td>
         </tr>
       <% }); %>
-      <% if (workspaces.length===0){ %><tr><td colspan="8" class="muted">No workspaces configured.</td></tr><% } %>
+      <% if (workspaces.length===0){ %><tr><td colspan="9" class="muted">No workspaces configured.</td></tr><% } %>
     </tbody>
   </table>
 </div>
@@ -78,6 +87,24 @@
         b.textContent = j.ok ? 'OK ✓' : ('Fail: ' + (j.error||''));
       } catch(e){ b.textContent = 'Error'; }
       b.disabled = false;
+    });
+  });
+
+  // Per-workspace rate-limit save.
+  document.querySelectorAll('.rate-form').forEach(function(f){
+    f.addEventListener('submit', async function(e){
+      e.preventDefault();
+      var btn = f.querySelector('button[type=submit]');
+      btn.disabled = true; var old = btn.textContent; btn.textContent = 'Saving…';
+      try {
+        var res = await fetch('/api/queue/workspaces/' + f.dataset.id + '/rate-limit', {
+          method:'POST', headers:{'Content-Type':'application/json','Accept':'application/json'},
+          body: JSON.stringify({ maxRpm: f.maxRpm.value, maxRps: f.maxRps.value, maxConcurrent: f.maxConcurrent.value })
+        });
+        var j = await res.json();
+        btn.textContent = j.ok ? 'Saved ✓' : ('Fail: ' + (j.error||''));
+      } catch(err){ btn.textContent = 'Error'; }
+      setTimeout(function(){ btn.textContent = old; btn.disabled = false; }, 1500);
     });
   });
 </script>

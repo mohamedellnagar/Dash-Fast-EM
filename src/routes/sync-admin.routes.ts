@@ -77,6 +77,31 @@ syncAdminRouter.post('/api/queue/workspaces/:id/pause', requireAuth, requirePerm
   await audit({ ...actor(req), action: p.data.paused ? 'WORKSPACE_PAUSE' : 'WORKSPACE_RESUME', entityType: 'FastTestWorkspace', entityId: req.params.id });
   res.json({ ok: true });
 });
+// Per-workspace rate-limit override. Sets (or updates) the throughput ceiling
+// for a single workspace; invalidating the cache makes it take effect within
+// seconds. maxRpm is the main knob (requests/min); maxRps and maxConcurrent
+// guard bursts. Kept within sane bounds so a typo can't hammer FastTest.
+const rateSchema = z.object({
+  maxRpm: z.number().int().min(1).max(6000),
+  maxRps: z.number().min(0.1).max(100),
+  maxConcurrent: z.number().int().min(1).max(64),
+});
+syncAdminRouter.post('/api/queue/workspaces/:id/rate-limit', requireAuth, requirePermission(PERMISSION.QUEUE_MANAGE), async (req, res) => {
+  const p = rateSchema.safeParse({
+    maxRpm: Number(req.body?.maxRpm), maxRps: Number(req.body?.maxRps), maxConcurrent: Number(req.body?.maxConcurrent),
+  });
+  if (!p.success) return res.status(400).json({ error: 'Invalid rate values' });
+  const ws = await prisma.fastTestWorkspace.findFirst({ where: { id: req.params.id, deletedAt: null } });
+  if (!ws) return res.status(404).json({ error: 'Workspace not found' });
+  await prisma.workspaceRateLimit.upsert({
+    where: { workspaceId: req.params.id },
+    create: { workspaceId: req.params.id, maxRpm: p.data.maxRpm, maxRps: p.data.maxRps, maxConcurrent: p.data.maxConcurrent },
+    update: { maxRpm: p.data.maxRpm, maxRps: p.data.maxRps, maxConcurrent: p.data.maxConcurrent },
+  });
+  invalidateRateConfig(req.params.id);
+  await audit({ ...actor(req), action: 'WORKSPACE_RATE_LIMIT', entityType: 'FastTestWorkspace', entityId: req.params.id, detail: `rpm=${p.data.maxRpm} rps=${p.data.maxRps} conc=${p.data.maxConcurrent}` });
+  res.json({ ok: true });
+});
 syncAdminRouter.post('/api/queue/job-types/:jobType/pause', requireAuth, requirePermission(PERMISSION.QUEUE_MANAGE), async (req, res) => {
   const p = pauseSchema.safeParse(req.body);
   if (!p.success) return res.status(400).json({ error: 'Invalid input' });

@@ -1,5 +1,6 @@
 import { prisma } from '../db/prisma';
 import { decryptOrNull, maskSecret } from '../lib/crypto';
+import { env } from '../config/env';
 
 /** Normalize a subject alias for matching (uppercase, collapse whitespace). */
 export function normalizeAlias(alias: string | null | undefined): string {
@@ -91,7 +92,11 @@ export async function listWorkspacesMasked() {
   const rows = await prisma.fastTestWorkspace.findMany({
     where: { deletedAt: null },
     orderBy: { subjectCode: 'asc' },
+    include: { rateLimit: true },
   });
+  // Per-workspace rate limits fall back to the global env defaults when the
+  // workspace has no override row yet (so the UI shows the effective values).
+  const dflt = { maxRpm: env.rate.maxRpm, maxRps: env.rate.maxRps, maxConcurrent: env.rate.maxConcurrent };
   return rows.map((w) => ({
     id: w.id,
     workspaceName: w.workspaceName,
@@ -106,5 +111,11 @@ export async function listWorkspacesMasked() {
     lastAuthenticationStatus: w.lastAuthenticationStatus,
     lastAuthenticationError: w.lastAuthenticationError,
     lastSuccessfulSyncAt: w.lastSuccessfulSyncAt,
+    rateLimit: {
+      maxRpm: w.rateLimit?.maxRpm ?? dflt.maxRpm,
+      maxRps: w.rateLimit?.maxRps ?? dflt.maxRps,
+      maxConcurrent: w.rateLimit?.maxConcurrent ?? dflt.maxConcurrent,
+      isDefault: !w.rateLimit,
+    },
   }));
 }
