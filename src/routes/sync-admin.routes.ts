@@ -93,14 +93,34 @@ syncAdminRouter.post('/api/queue/workspaces/:id/rate-limit', requireAuth, requir
   if (!p.success) return res.status(400).json({ error: 'Invalid rate values' });
   const ws = await prisma.fastTestWorkspace.findFirst({ where: { id: req.params.id, deletedAt: null } });
   if (!ws) return res.status(404).json({ error: 'Workspace not found' });
+  // A manual rate-limit edit turns auto-tune off — the operator is taking over.
   await prisma.workspaceRateLimit.upsert({
     where: { workspaceId: req.params.id },
-    create: { workspaceId: req.params.id, maxRpm: p.data.maxRpm, maxRps: p.data.maxRps, maxConcurrent: p.data.maxConcurrent },
-    update: { maxRpm: p.data.maxRpm, maxRps: p.data.maxRps, maxConcurrent: p.data.maxConcurrent },
+    create: { workspaceId: req.params.id, maxRpm: p.data.maxRpm, maxRps: p.data.maxRps, maxConcurrent: p.data.maxConcurrent, autoTune: false },
+    update: { maxRpm: p.data.maxRpm, maxRps: p.data.maxRps, maxConcurrent: p.data.maxConcurrent, autoTune: false },
   });
   invalidateRateConfig(req.params.id);
   await audit({ ...actor(req), action: 'WORKSPACE_RATE_LIMIT', entityType: 'FastTestWorkspace', entityId: req.params.id, detail: `rpm=${p.data.maxRpm} rps=${p.data.maxRps} conc=${p.data.maxConcurrent}` });
   res.json({ ok: true });
+});
+
+// Toggle auto-tune (AIMD) for a workspace. When enabled, the system raises
+// maxRpm while healthy and cuts it on FastTest pushback; the stored maxRpm
+// becomes the live tuned value. Seeds a sane starting point on first enable.
+syncAdminRouter.post('/api/queue/workspaces/:id/autotune', requireAuth, requirePermission(PERMISSION.QUEUE_MANAGE), async (req, res) => {
+  const enabled = req.body?.enabled === true || req.body?.enabled === 'true';
+  const ws = await prisma.fastTestWorkspace.findFirst({ where: { id: req.params.id, deletedAt: null } });
+  if (!ws) return res.status(404).json({ error: 'Workspace not found' });
+  const existing = await prisma.workspaceRateLimit.findUnique({ where: { workspaceId: req.params.id } });
+  const seedRpm = existing?.maxRpm && existing.maxRpm >= 60 ? existing.maxRpm : 120;
+  await prisma.workspaceRateLimit.upsert({
+    where: { workspaceId: req.params.id },
+    create: { workspaceId: req.params.id, autoTune: enabled, maxRpm: seedRpm, maxRps: Math.ceil(seedRpm / 30), maxConcurrent: Math.max(3, Math.ceil(seedRpm / 60)) },
+    update: { autoTune: enabled },
+  });
+  invalidateRateConfig(req.params.id);
+  await audit({ ...actor(req), action: enabled ? 'WORKSPACE_AUTOTUNE_ON' : 'WORKSPACE_AUTOTUNE_OFF', entityType: 'FastTestWorkspace', entityId: req.params.id });
+  res.json({ ok: true, autoTune: enabled });
 });
 syncAdminRouter.post('/api/queue/job-types/:jobType/pause', requireAuth, requirePermission(PERMISSION.QUEUE_MANAGE), async (req, res) => {
   const p = pauseSchema.safeParse(req.body);

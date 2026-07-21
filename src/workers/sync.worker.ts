@@ -9,6 +9,7 @@ import { claimNext, completeJob, failJob, heartbeatJob, recoverStalledJobs } fro
 import { runJob } from '../services/sync/handlers';
 import { FastTestClient, fastTestClient } from '../services/fasttest/client';
 import { enqueueDueJobs, refreshStaleFlags } from '../services/sync/scheduler.service';
+import { autoTuneRateLimits } from '../services/sync/autotune.service';
 import { reapExpiredLocks } from '../services/sync/lock.service';
 import { registerWorker, heartbeat, markStopped, reconcileWorkerHealth, WorkerRuntime } from '../services/sync/worker-registry.service';
 import { captureSnapshots } from '../services/observability/snapshots.service';
@@ -106,6 +107,7 @@ export function startWorkerLoops(): { stop: () => void; done: Promise<void> } {
   let lastMaintenance = 0;
   let lastStale = 0;
   let lastRetention = 0;
+  let lastAutotune = 0;
 
   // Job-runner pool: N concurrent runners pulling from the queue.
   const runner = async () => {
@@ -134,6 +136,12 @@ export function startWorkerLoops(): { stop: () => void; done: Promise<void> } {
       if (now - lastStale >= 5 * 60 * 1000) {
         lastStale = now;
         await refreshStaleFlags().catch(() => 0);
+      }
+      // Auto-tune rate limits (AIMD) once per scheduler interval — cheap, only
+      // touches workspaces with autoTune enabled.
+      if (now - lastAutotune >= 30 * 1000) {
+        lastAutotune = now;
+        await autoTuneRateLimits().catch((e) => logger.warn({ err: (e as Error).message }, 'autotune failed'));
       }
       if (now - lastMaintenance >= 60 * 1000) {
         lastMaintenance = now;

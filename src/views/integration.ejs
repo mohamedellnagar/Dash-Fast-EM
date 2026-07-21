@@ -17,7 +17,12 @@
           <td><%= w.isActive ? 'Yes' : 'No' %></td>
           <td><%= w.syncEnabled ? 'On' : 'Off' %></td>
           <td>
-            <form class="rate-form" data-id="<%= w.id %>" style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:0">
+            <label style="font-size:11px;display:flex;align-items:center;gap:5px;margin-bottom:5px" title="Let the system raise/lower the rate automatically based on FastTest health (AIMD)">
+              <input type="checkbox" class="autotune-cb" data-id="<%= w.id %>" <%= w.rateLimit.autoTune ? 'checked' : '' %>>
+              <span style="color:<%= w.rateLimit.autoTune ? '#22c55e' : 'var(--muted)' %>;font-weight:700">⚙️ Auto</span>
+              <% if (w.rateLimit.autoTune) { %><span class="muted">· now <b><%= w.rateLimit.maxRpm %></b> rpm</span><% } %>
+            </label>
+            <form class="rate-form" data-id="<%= w.id %>" style="display:<%= w.rateLimit.autoTune ? 'none' : 'flex' %>;gap:6px;align-items:center;flex-wrap:wrap;margin:0">
               <label style="font-size:11px;color:var(--muted)" title="Requests per minute (main throughput cap)">rpm <input name="maxRpm" type="number" min="1" max="6000" value="<%= w.rateLimit.maxRpm %>" style="width:64px" required></label>
               <label style="font-size:11px;color:var(--muted)" title="Requests per second (burst cap)">rps <input name="maxRps" type="number" min="0.1" max="100" step="0.1" value="<%= w.rateLimit.maxRps %>" style="width:52px" required></label>
               <label style="font-size:11px;color:var(--muted)" title="Max concurrent in-flight requests">conc <input name="maxConcurrent" type="number" min="1" max="64" value="<%= w.rateLimit.maxConcurrent %>" style="width:48px" required></label>
@@ -105,6 +110,20 @@
         btn.textContent = j.ok ? 'Saved ✓' : ('Fail: ' + (j.error||''));
       } catch(err){ btn.textContent = 'Error'; }
       setTimeout(function(){ btn.textContent = old; btn.disabled = false; }, 1500);
+    });
+  });
+
+  // Per-workspace auto-tune toggle.
+  document.querySelectorAll('.autotune-cb').forEach(function(cb){
+    cb.addEventListener('change', async function(){
+      cb.disabled = true;
+      try {
+        await fetch('/api/queue/workspaces/' + cb.dataset.id + '/autotune', {
+          method:'POST', headers:{'Content-Type':'application/json','Accept':'application/json'},
+          body: JSON.stringify({ enabled: cb.checked })
+        });
+        location.reload();
+      } catch(e){ cb.disabled = false; cb.checked = !cb.checked; }
     });
   });
 </script>

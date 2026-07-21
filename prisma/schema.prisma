@@ -769,6 +769,10 @@ model DistributedLock {
 // Per-workspace, per-scope rate-limit configuration (conservative defaults).
 model WorkspaceRateLimit {
   workspaceId    String   @id
+  // When true, the system auto-tunes maxRpm/maxConcurrent (AIMD) from live API
+  // health instead of using the values as a fixed ceiling. maxRpm then holds
+  // the current auto-tuned value.
+  autoTune       Boolean  @default(false)
   maxRps         Float    @default(2)
   maxRpm         Int      @default(60)
   maxConcurrent  Int      @default(3)

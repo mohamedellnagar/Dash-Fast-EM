@@ -116,6 +116,7 @@ export async function listWorkspacesMasked() {
       maxRps: w.rateLimit?.maxRps ?? dflt.maxRps,
       maxConcurrent: w.rateLimit?.maxConcurrent ?? dflt.maxConcurrent,
       isDefault: !w.rateLimit,
+      autoTune: w.rateLimit?.autoTune ?? false,
     },
   }));
 }
