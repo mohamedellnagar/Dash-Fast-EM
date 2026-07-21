@@ -15,6 +15,9 @@
       </div>
       <button class="btn" type="submit" style="width:100%">Sign in</button>
     </form>
+    <% if (typeof appVersion !== 'undefined') { %>
+    <div class="login-version" title="Build: <%= appVersion.buildTime %>"><%= appVersion.label %></div>
+    <% } %>
   </div>
 </div>
 </body>

@@ -112,6 +112,8 @@ input:focus, select:focus { outline: none; border-color: var(--accent); box-shad
 .login-card h1 { font-size: 18px; margin: 0 0 4px; } .login-card p { color: var(--muted); margin: 0 0 20px; font-size:13px; }
 .login-card .field { margin-bottom: 14px; } .login-card label { display:block; font-size:12px; color:var(--muted); margin-bottom:5px; }
 .login-card input { width: 100%; }
+.login-version { margin-top: 18px; text-align: center; font-size: 11px; color: var(--muted);
+  font-variant-numeric: tabular-nums; letter-spacing: .02em; }
 .alert { background:#ef444422; border:1px solid #ef444455; color:#fca5a5; padding:10px 12px; border-radius:8px; margin-bottom:14px; font-size:13px;}
 .alert.ok { background:#22c55e22; border-color:#22c55e55; color:#86efac; }
 .muted { color: var(--muted); } .mono { font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
