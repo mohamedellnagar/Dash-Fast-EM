@@ -86,34 +86,22 @@ function startHealthServer(): void {
   server.listen(env.port, () => logger.info({ port: env.port }, 'worker health endpoint listening'));
 }
 
-async function main(): Promise<void> {
-  startHealthServer();
-  await registerWorker(WORKER_ID);
-  logger.info({ worker: WORKER_ID, concurrency: env.sync.concurrency }, 'sync worker started (durable queue)');
-
+/**
+ * Run the worker's runner pool + orchestration loops until `stop()` is called.
+ * Extracted so the same loops power both the standalone worker process and the
+ * embedded worker inside the web process (WORKER_IN_WEB=true) — the only
+ * difference is the caller owns the health server, signal handlers, and exit.
+ * Returns a stop handle; the returned promise resolves when all loops drain.
+ */
+export function startWorkerLoops(): { stop: () => void; done: Promise<void> } {
   let running = true;
   const stop = () => {
     if (running) logger.info({ worker: WORKER_ID }, 'graceful shutdown requested');
     running = false;
   };
-  process.on('SIGTERM', stop);
-  process.on('SIGINT', stop);
 
-  // Backstop: a transient error (e.g. a full temp disk making a query fail) must
-  // NOT kill the worker — that silently stops all sync until a manual restart.
-  // Log and keep the main loop running; the failed job is retried by the queue.
-  process.on('unhandledRejection', (reason: unknown) => {
-    const err = reason instanceof Error ? reason : new Error(String(reason));
-    logger.error({ worker: WORKER_ID, err: err.message, stack: err.stack }, 'unhandledRejection (worker kept alive)');
-  });
-  process.on('uncaughtException', (err: Error) => {
-    logger.error({ worker: WORKER_ID, err: err.message, stack: err.stack }, 'uncaughtException (worker kept alive)');
-  });
-
-  // Heartbeat loop.
   const hbTimer = setInterval(() => heartbeat(WORKER_ID, runtime).catch(() => undefined), env.sync.heartbeatMs);
 
-  // Scheduler loop (idempotent via queue dedup — safe on every worker).
   let lastScheduler = 0;
   let lastMaintenance = 0;
   let lastStale = 0;
@@ -135,7 +123,7 @@ async function main(): Promise<void> {
   };
   const runners = Array.from({ length: env.sync.concurrency }, () => runner());
 
-  // Periodic orchestration loop.
+  // Periodic orchestration loop (scheduler + maintenance).
   const orchestrator = async () => {
     while (running) {
       const now = Date.now();
@@ -160,10 +148,47 @@ async function main(): Promise<void> {
     }
   };
 
-  await Promise.all([...runners, orchestrator()]);
+  const done = Promise.all([...runners, orchestrator()]).then(async () => {
+    clearInterval(hbTimer);
+    await markStopped(WORKER_ID).catch(() => undefined);
+  });
 
-  clearInterval(hbTimer);
-  await markStopped(WORKER_ID).catch(() => undefined);
+  return { stop, done };
+}
+
+/**
+ * Start the embedded worker inside the web process. Registers the worker and
+ * runs the loops; the web process owns shutdown, so this never calls exit or
+ * disconnects Prisma (the web server does that). Safe no-op guard for double
+ * calls is the caller's responsibility.
+ */
+export async function startEmbeddedWorker(): Promise<{ stop: () => void; done: Promise<void> }> {
+  await registerWorker(WORKER_ID);
+  logger.info({ worker: WORKER_ID, concurrency: env.sync.concurrency }, 'embedded sync worker started (in web process)');
+  return startWorkerLoops();
+}
+
+async function main(): Promise<void> {
+  startHealthServer();
+  await registerWorker(WORKER_ID);
+  logger.info({ worker: WORKER_ID, concurrency: env.sync.concurrency }, 'sync worker started (durable queue)');
+
+  const { stop, done } = startWorkerLoops();
+  process.on('SIGTERM', stop);
+  process.on('SIGINT', stop);
+
+  // Backstop: a transient error (e.g. a full temp disk making a query fail) must
+  // NOT kill the worker — that silently stops all sync until a manual restart.
+  // Log and keep the main loop running; the failed job is retried by the queue.
+  process.on('unhandledRejection', (reason: unknown) => {
+    const err = reason instanceof Error ? reason : new Error(String(reason));
+    logger.error({ worker: WORKER_ID, err: err.message, stack: err.stack }, 'unhandledRejection (worker kept alive)');
+  });
+  process.on('uncaughtException', (err: Error) => {
+    logger.error({ worker: WORKER_ID, err: err.message, stack: err.stack }, 'uncaughtException (worker kept alive)');
+  });
+
+  await done;
   await prisma.$disconnect();
   logger.info({ worker: WORKER_ID }, 'worker stopped cleanly');
   process.exit(0);

@@ -78,6 +78,10 @@ export const env = {
     heartbeatMs: int('WORKER_HEARTBEAT_MS', 10000),
     workerStaleMs: int('WORKER_STALE_MS', 30000),
     globalMaxConcurrent: int('SYNC_GLOBAL_MAX_CONCURRENT', 16),
+    // Run the sync worker loops inside the web process instead of a separate
+    // process. Convenient for single-box / local runs (one `npm run dev` does
+    // everything). In production with a dedicated worker service, keep this off.
+    workerInWeb: bool('WORKER_IN_WEB', false),
   },
 
   // Conservative per-workspace defaults — FastTest limits are NOT assumed.

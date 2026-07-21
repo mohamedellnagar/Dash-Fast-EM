@@ -6,15 +6,26 @@ import { ensureBootstrap } from './db/bootstrap';
 
 const app = createApp();
 
+// When WORKER_IN_WEB=true, run the sync worker loops inside this process so a
+// single web instance also performs sync — no separate worker service needed.
+let embeddedWorker: { stop: () => void; done: Promise<void> } | null = null;
+
 const server = app.listen(env.port, () => {
   logger.info({ port: env.port, env: env.nodeEnv }, 'FastTest dashboard listening');
   // First-boot bootstrap (permissions, roles, admin) — idempotent, non-blocking.
-  void ensureBootstrap();
+  void ensureBootstrap().then(async () => {
+    if (env.sync.workerInWeb) {
+      const { startEmbeddedWorker } = await import('./workers/sync.worker');
+      embeddedWorker = await startEmbeddedWorker();
+    }
+  }).catch((e) => logger.error({ err: (e as Error).message }, 'embedded worker start failed'));
 });
 
 async function shutdown(signal: string) {
   logger.info({ signal }, 'shutting down');
+  embeddedWorker?.stop();
   server.close(async () => {
+    if (embeddedWorker) await embeddedWorker.done.catch(() => undefined);
     await disconnectPrisma();
     process.exit(0);
   });
