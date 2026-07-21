@@ -428,12 +428,23 @@ export async function syncAllowedNow(now: () => number = () => Date.now()): Prom
   const end = Number(e);
   if (Number.isNaN(start) || Number.isNaN(end)) return true;
 
-  const hour = new Date(now()).getHours();
+  const hour = hourInTimezone(now(), env.timezone);
   return start <= end ? hour >= start && hour < end : hour >= start || hour < end;
 }
 
+/** Current hour (0-23) in a given IANA timezone, independent of the server clock. */
+export function hourInTimezone(ms: number, timeZone: string): number {
+  try {
+    const h = new Intl.DateTimeFormat('en-US', { timeZone, hour: '2-digit', hour12: false }).format(new Date(ms));
+    const n = Number(h === '24' ? '0' : h); // some ICU builds emit "24" for midnight
+    return Number.isNaN(n) ? new Date(ms).getHours() : n;
+  } catch {
+    return new Date(ms).getHours(); // invalid TZ → fall back to server local
+  }
+}
+
 /** Current control state for UI/status. */
-export async function getSyncControlState(): Promise<{ globalPaused: boolean; windowStart: number | null; windowEnd: number | null; allowedNow: boolean; fastMode: boolean; frozen: boolean; connectionTestDisabled: boolean; syncMode: SyncMode }> {
+export async function getSyncControlState(): Promise<{ globalPaused: boolean; windowStart: number | null; windowEnd: number | null; allowedNow: boolean; fastMode: boolean; frozen: boolean; connectionTestDisabled: boolean; syncMode: SyncMode; timezone: string; currentHour: number }> {
   const [global, rows, allowedNow, fastMode, frozen, connectionTestDisabled, syncMode] = await Promise.all([
     prisma.queueControl.findFirst({ where: { scope: 'GLOBAL', scopeKey: 'ALL' } }),
     prisma.systemSetting.findMany({ where: { key: { in: [WINDOW_START_KEY, WINDOW_END_KEY] } } }),
@@ -454,6 +465,8 @@ export async function getSyncControlState(): Promise<{ globalPaused: boolean; wi
     frozen,
     connectionTestDisabled,
     syncMode,
+    timezone: env.timezone,
+    currentHour: hourInTimezone(Date.now(), env.timezone),
   };
 }
 

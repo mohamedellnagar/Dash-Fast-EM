@@ -38,6 +38,10 @@ export const env = {
   isProd: str('NODE_ENV', 'development') === 'production',
   port: int('PORT', 3000),
   logLevel: str('LOG_LEVEL', 'info'),
+  // IANA timezone the daily sync window is evaluated in. Defaults to UAE so the
+  // window matches local operating hours regardless of the server's clock (which
+  // is UTC in most containers).
+  timezone: str('SYNC_TZ', 'Asia/Dubai'),
 
   databaseUrl: str('DATABASE_URL', 'file:./dev.db'),
 

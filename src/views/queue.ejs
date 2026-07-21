@@ -67,7 +67,7 @@
       <div class="muted-sm" style="font-size:11px;margin-top:2px"><%= controlState.syncMode === 'SWEEP' ? 'يمشي على كل كود غير مكتمل بالترتيب ويلفّ باستمرار' : 'فترات حسب الحالة + backoff تكيّفي' %></div>
     </span>
     <span style="border-left:1px solid #ccc;padding-left:14px">
-      Daily window (server hour 0–23):
+      Daily window (<%= controlState.timezone %>, hour 0–23 · now <%= controlState.currentHour %>):
       <input type="number" id="winStart" min="0" max="23" style="width:56px" value="<%= controlState.windowStart == null ? '' : controlState.windowStart %>" placeholder="start">
       →
       <input type="number" id="winEnd" min="0" max="23" style="width:56px" value="<%= controlState.windowEnd == null ? '' : controlState.windowEnd %>" placeholder="end">
