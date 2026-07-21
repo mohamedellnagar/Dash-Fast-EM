@@ -1,12 +1,13 @@
 import { Router } from 'express';
 import { prisma } from '../db/prisma';
 import { env } from '../config/env';
+import { version } from '../lib/version';
 
 export const healthRouter = Router();
 
 // Liveness probe. `/healthz` is a conventional alias for external monitors/k8s.
 healthRouter.get(['/health', '/healthz'], (_req, res) => {
-  res.json({ status: 'ok', service: 'fasttest-dashboard', time: new Date().toISOString() });
+  res.json({ status: 'ok', service: 'fasttest-dashboard', version, time: new Date().toISOString() });
 });
 
 healthRouter.get('/health/database', async (_req, res) => {

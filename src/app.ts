@@ -13,6 +13,7 @@ import { prisma } from './db/prisma';
 import { logger } from './lib/logger';
 import { attachPrincipal } from './middleware/auth';
 import { getAcademicYears } from './services/academic-years';
+import { version } from './lib/version';
 import { authRouter } from './routes/auth.routes';
 import { dashboardRouter } from './routes/dashboard.routes';
 import { apiRouter } from './routes/api.routes';
@@ -103,6 +104,7 @@ export function createApp(): Express {
     res.locals.selectedYear = (req.query.academicYear as string) || '';
     res.locals.selectedProgram = (req.query.programType as string) || '';
     res.locals.programTypes = ['SPA', 'ABA'];
+    res.locals.appVersion = version;
     try {
       res.locals.academicYears = await getAcademicYears();
     } catch {

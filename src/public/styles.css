@@ -31,6 +31,11 @@ a:hover { text-decoration: underline; }
 .nav a { display: block; padding: 9px 20px; color: var(--muted); border-left: 3px solid transparent; }
 .nav a:hover { background: var(--panel-2); text-decoration: none; color: var(--text); }
 .nav a.active { color: #fff; border-left-color: var(--accent); background: var(--panel-2); }
+/* Build/version stamp pinned to the bottom of the sidebar. */
+.app-version { flex: 0 0 auto; padding: 8px 20px; border-top: 1px solid var(--line);
+  font-size: 10.5px; color: var(--muted); font-variant-numeric: tabular-nums; letter-spacing: .02em;
+  display: flex; align-items: center; gap: 7px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.app-version .av-dot { width: 6px; height: 6px; border-radius: 50%; background: #22c55e; flex: 0 0 auto; box-shadow: 0 0 6px #22c55e88; }
 .nav-group { padding: 16px 20px 5px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .09em; color: var(--muted); opacity: .65; }
 .nav-group:first-child { padding-top: 4px; }
 [dir="rtl"] .nav-group { text-align: right; }

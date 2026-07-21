@@ -13,7 +13,13 @@ RUN npm run build
 
 # ---- Runtime stage ----
 FROM node:20-alpine AS runtime
+# Version stamp baked in at build time (the image has no .git to read). CI passes
+# these; they surface in the UI footer and /health.
+ARG GIT_SHA=unknown
+ARG BUILD_TIME
 ENV NODE_ENV=production
+ENV GIT_SHA=$GIT_SHA
+ENV BUILD_TIME=$BUILD_TIME
 # OpenSSL so Prisma detects the right engine at runtime (no runtime download).
 RUN apk add --no-cache openssl
 WORKDIR /app

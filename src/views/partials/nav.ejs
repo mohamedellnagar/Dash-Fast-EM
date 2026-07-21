@@ -71,6 +71,11 @@
       <% } %>
 
     </nav>
+    <% if (typeof appVersion !== 'undefined') { %>
+    <div class="app-version" title="Build: <%= appVersion.buildTime %>">
+      <span class="av-dot"></span><%= appVersion.label %>
+    </div>
+    <% } %>
   </aside>
   <script>(function(){var yp=document.getElementById('yearPicker'); if(yp) yp.addEventListener('change', function(){ yp.form.submit(); }); var pp=document.getElementById('programPicker'); if(pp) pp.addEventListener('change', function(){ pp.form.submit(); });})();</script>
   <main class="main">
