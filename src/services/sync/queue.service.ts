@@ -279,24 +279,25 @@ const RATE_PROFILES = {
 };
 const FAST_MODE_KEY = 'sync.fastMode';
 
-/** Turn the fast/turbo sync profile on or off across all active workspaces. */
+/**
+ * Toggle the fast/turbo profile. This only flips a flag — it does NOT overwrite
+ * per-workspace rate limits, so a workspace with a manual override keeps its
+ * values. The flag changes the DEFAULT profile (NORMAL vs FAST) used by any
+ * workspace that has no override row (see getRateConfig / fastModeDefault).
+ */
 export async function setFastMode(enabled: boolean, by?: string): Promise<void> {
-  const profile = enabled ? RATE_PROFILES.FAST : RATE_PROFILES.NORMAL;
-  const workspaces = await prisma.fastTestWorkspace.findMany({ where: { deletedAt: null }, select: { id: true } });
-  for (const ws of workspaces) {
-    await prisma.workspaceRateLimit.upsert({
-      where: { workspaceId: ws.id },
-      create: { workspaceId: ws.id, ...profile },
-      update: { ...profile },
-    });
-    invalidateRateConfig(ws.id);
-  }
   await prisma.systemSetting.upsert({
     where: { key: FAST_MODE_KEY },
     create: { key: FAST_MODE_KEY, value: enabled ? 'true' : 'false' },
     update: { value: enabled ? 'true' : 'false' },
   });
+  invalidateRateConfig(); // clear all so un-overridden workspaces pick up the new default
   void by;
+}
+
+/** The default rate profile for workspaces without a manual override. */
+export function fastModeProfile(enabled: boolean) {
+  return enabled ? RATE_PROFILES.FAST : RATE_PROFILES.NORMAL;
 }
 
 export async function isFastMode(): Promise<boolean> {

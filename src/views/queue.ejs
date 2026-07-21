@@ -200,7 +200,7 @@ if(tct) tct.onclick = async function(){
 var tg = document.getElementById('toggleGlobal');
 if(tg) tg.onclick = async function(){ var turnOff = tg.dataset.paused!=='true'; await post('/api/queue/global/pause', {paused: turnOff}); location.reload(); };
 var tf = document.getElementById('toggleFast');
-if(tf) tf.onclick = async function(){ var enable = tf.dataset.fast!=='true'; if(enable && !confirm('Enable FAST sync (~20 req/s)? This replaces the normal conservative rate.')) return; await post('/api/queue/fast-mode', {enabled: enable}); location.reload(); };
+if(tf) tf.onclick = async function(){ var enable = tf.dataset.fast!=='true'; if(enable && !confirm('Enable FAST sync (~20 req/s) as the default for workspaces without a manual rate limit? Per-workspace overrides in Integration Settings are kept.')) return; await post('/api/queue/fast-mode', {enabled: enable}); location.reload(); };
 var tm = document.getElementById('toggleMode');
 if(tm) tm.onclick = async function(){ var next = tm.dataset.mode==='SWEEP' ? 'ADAPTIVE' : 'SWEEP';
   if(next==='SWEEP' && !confirm('التبديل للمسح الدوري (Sweep)؟ هيمشي على كل كود غير مكتمل بالترتيب ويلفّ باستمرار (بيتجاهل الفترات التكيّفية).')) return;

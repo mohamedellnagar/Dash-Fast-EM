@@ -35,6 +35,20 @@ export function defaultRateConfig(): RateConfig {
   };
 }
 
+/**
+ * Default config for a workspace with NO manual override: the FAST or NORMAL
+ * profile depending on the fast-mode toggle. Imported lazily to avoid a cycle
+ * with queue.service.
+ */
+async function fastModeDefaultConfig(): Promise<RateConfig> {
+  const { isFastMode, fastModeProfile } = await import('./queue.service');
+  const p = fastModeProfile(await isFastMode().catch(() => false));
+  return {
+    maxRps: p.maxRps, maxRpm: p.maxRpm, maxConcurrent: p.maxConcurrent, maxBatch: p.maxBatch,
+    minDelayMs: p.minDelayMs, burst: p.burst, cooldownMs: p.cooldownMs,
+  };
+}
+
 const configCache = new Map<string, { cfg: RateConfig; at: number }>();
 const CONFIG_TTL_MS = 15000;
 
@@ -42,7 +56,9 @@ export async function getRateConfig(workspaceId: string, now: () => number = () 
   const cached = configCache.get(workspaceId);
   if (cached && now() - cached.at < CONFIG_TTL_MS) return cached.cfg;
   const row = await prisma.workspaceRateLimit.findUnique({ where: { workspaceId } }).catch(() => null);
-  const d = defaultRateConfig();
+  // No manual override → use the fast/normal default profile (fast mode toggle),
+  // falling back to env defaults. A manual override row always wins.
+  const d = row ? defaultRateConfig() : await fastModeDefaultConfig();
   const cfg: RateConfig = row
     ? {
         maxRps: row.maxRps, maxRpm: row.maxRpm, maxConcurrent: row.maxConcurrent, maxBatch: row.maxBatch,
