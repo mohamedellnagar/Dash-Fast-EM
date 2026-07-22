@@ -120,21 +120,28 @@ export async function claimNext(workerId: string, now: () => number = () => Date
 
   const { workspaces: pausedWs, jobTypes: pausedJt } = await pausedSets();
 
-  // Fetch a wider window of due jobs than one worker needs. With ~20 workers all
-  // claiming at once, a narrow window makes them all fight over the same top
-  // rows — the guarded update serializes and InnoDB deadlocks. A wider pool +
-  // per-worker random ordering spreads the contention so each worker targets a
-  // different row first.
-  const candidates = await prisma.syncJob.findMany({
-    where: {
-      OR: [
-        { status: JOB_STATUS.QUEUED, scheduledAt: { lte: nowDate } },
-        { status: JOB_STATUS.RETRY_SCHEDULED, nextRetryAt: { lte: nowDate } },
-      ],
-    },
+  // Fetch a wider window of due jobs than one worker needs so ~20 concurrent
+  // claimers target different rows (shuffled below) instead of fighting over the
+  // head of the queue.
+  //
+  // IMPORTANT: query QUEUED and RETRY_SCHEDULED SEPARATELY rather than with an
+  // OR. The OR across two different (status,column) ranges defeats the index —
+  // MySQL falls back to a full scan + filesort of the whole SyncJob table
+  // (hundreds of thousands of rows incl. COMPLETED), making every claim take
+  // hundreds of ms and serialising all runners on the DB (throughput stuck near
+  // ~100/min). Each single-status query uses its index cleanly.
+  const queued = await prisma.syncJob.findMany({
+    where: { status: JOB_STATUS.QUEUED, scheduledAt: { lte: nowDate } },
     orderBy: [{ priority: 'asc' }, { scheduledAt: 'asc' }],
     take: 200,
   });
+  const candidates = queued.length
+    ? queued
+    : await prisma.syncJob.findMany({
+        where: { status: JOB_STATUS.RETRY_SCHEDULED, nextRetryAt: { lte: nowDate } },
+        orderBy: [{ priority: 'asc' }, { nextRetryAt: 'asc' }],
+        take: 200,
+      });
   if (candidates.length === 0) return null;
   // Shuffle so concurrent workers don't all attempt the same head-of-queue row.
   for (let i = candidates.length - 1; i > 0; i--) {
