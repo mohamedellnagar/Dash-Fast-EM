@@ -183,7 +183,8 @@ export async function startEmbeddedWorker(): Promise<{ stop: () => void; done: P
 async function main(): Promise<void> {
   startHealthServer();
   await registerWorker(WORKER_ID);
-  logger.info({ worker: WORKER_ID, concurrency: env.sync.concurrency }, 'sync worker started (durable queue)');
+  const { version } = await import('../lib/version');
+  logger.info({ worker: WORKER_ID, concurrency: env.sync.concurrency, version: version.label }, 'sync worker started (durable queue)');
 
   const { stop, done } = startWorkerLoops();
   process.on('SIGTERM', stop);
