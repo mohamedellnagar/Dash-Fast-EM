@@ -48,9 +48,9 @@ dashboardRouter.get('/wall/ops', requireAuth, requirePermission(PERMISSION.QUEUE
 // Exam Operations ABA removed — its routes now land on the Operations Center.
 dashboardRouter.get(['/exam', '/wall/exam', '/wall/schools'], requireAuth, (_req, res) => res.redirect('/ops'));
 
-// Executive Dashboard removed — root now lands on Live Monitoring.
+// Root lands on the Operations Center.
 dashboardRouter.get('/', requireAuth, async (_req, res) => {
-  res.redirect('/monitoring');
+  res.redirect('/ops');
 });
 
 // Live monitoring (Phase 2 — advanced filters, column selection, saved views)

@@ -19,7 +19,7 @@ const loginSchema = z.object({
 });
 
 authRouter.get('/login', (req, res) => {
-  if (req.principal) return res.redirect('/monitoring');
+  if (req.principal) return res.redirect('/ops');
   res.render('login', { title: 'Sign in', error: null, principal: null });
 });
 
@@ -36,7 +36,7 @@ authRouter.post('/login', loginLimiter, async (req, res) => {
   }
   req.session.userId = result.userId;
   await audit({ userId: result.userId, actorEmail: email, action: 'LOGIN', ipAddress: req.ip });
-  res.redirect('/monitoring');
+  res.redirect('/ops');
 });
 
 authRouter.post('/logout', async (req, res) => {
