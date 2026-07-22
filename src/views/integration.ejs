@@ -6,7 +6,7 @@
 <div class="panel">
   <h2>FastTest Workspaces</h2>
   <table>
-    <thead><tr><th>Workspace</th><th>Subject</th><th>Base URL</th><th>API Key</th><th>Active</th><th>Sync</th><th>Rate limit (per workspace)</th><th>Last Auth</th><th></th></tr></thead>
+    <thead><tr><th>Workspace</th><th>Subject</th><th>Base URL</th><th>API Key</th><th>Active</th><th>Sync</th><th>Rate (auto-managed)</th><th>Last Auth</th><th></th></tr></thead>
     <tbody>
       <% workspaces.forEach(function(w){ %>
         <tr>
@@ -17,18 +17,14 @@
           <td><%= w.isActive ? 'Yes' : 'No' %></td>
           <td><%= w.syncEnabled ? 'On' : 'Off' %></td>
           <td>
-            <label style="font-size:11px;display:flex;align-items:center;gap:5px;margin-bottom:5px" title="Let the system raise/lower the rate automatically based on FastTest health (AIMD)">
-              <input type="checkbox" class="autotune-cb" data-id="<%= w.id %>" <%= w.rateLimit.autoTune ? 'checked' : '' %>>
-              <span style="color:<%= w.rateLimit.autoTune ? '#22c55e' : 'var(--muted)' %>;font-weight:700">⚙️ Auto</span>
-              <% if (w.rateLimit.autoTune) { %><span class="muted">· now <b><%= w.rateLimit.maxRpm %></b> rpm</span><% } %>
-            </label>
-            <form class="rate-form" data-id="<%= w.id %>" style="display:<%= w.rateLimit.autoTune ? 'none' : 'flex' %>;gap:6px;align-items:center;flex-wrap:wrap;margin:0">
-              <label style="font-size:11px;color:var(--muted)" title="Requests per minute (main throughput cap)">rpm <input name="maxRpm" type="number" min="1" max="6000" value="<%= w.rateLimit.maxRpm %>" style="width:64px" required></label>
-              <label style="font-size:11px;color:var(--muted)" title="Requests per second (burst cap)">rps <input name="maxRps" type="number" min="0.1" max="100" step="0.1" value="<%= w.rateLimit.maxRps %>" style="width:52px" required></label>
-              <label style="font-size:11px;color:var(--muted)" title="Max concurrent in-flight requests">conc <input name="maxConcurrent" type="number" min="1" max="64" value="<%= w.rateLimit.maxConcurrent %>" style="width:48px" required></label>
-              <button class="btn sm" type="submit">Save</button>
-              <% if (w.rateLimit.isDefault) { %><span class="muted" style="font-size:10px">(default)</span><% } %>
-            </form>
+            <% if (w.rateLimit.autoTune) { %>
+              <span style="color:#22c55e;font-weight:700">⚙️ Auto</span>
+              <span class="muted">· <b style="color:var(--ink)"><%= w.rateLimit.maxRpm %></b> rpm · <%= w.rateLimit.maxConcurrent %> conc</span>
+              <div class="muted" style="font-size:10px;margin-top:2px">managed by Mode — self-tunes to FastTest</div>
+            <% } else { %>
+              <span class="muted" style="font-size:11px">manual · <b style="color:var(--ink)"><%= w.rateLimit.maxRpm %></b> rpm</span>
+              <button class="btn secondary sm handover-btn" data-id="<%= w.id %>" style="margin-left:8px">Hand to Auto</button>
+            <% } %>
           </td>
           <td>
             <% if (w.lastAuthenticationStatus) { %>
@@ -95,35 +91,17 @@
     });
   });
 
-  // Per-workspace rate-limit save.
-  document.querySelectorAll('.rate-form').forEach(function(f){
-    f.addEventListener('submit', async function(e){
-      e.preventDefault();
-      var btn = f.querySelector('button[type=submit]');
-      btn.disabled = true; var old = btn.textContent; btn.textContent = 'Saving…';
+  // Hand a manually-limited workspace back to the auto-tuner.
+  document.querySelectorAll('.handover-btn').forEach(function(b){
+    b.addEventListener('click', async function(){
+      b.disabled = true; b.textContent = '…';
       try {
-        var res = await fetch('/api/queue/workspaces/' + f.dataset.id + '/rate-limit', {
+        await fetch('/api/queue/workspaces/' + b.dataset.id + '/autotune', {
           method:'POST', headers:{'Content-Type':'application/json','Accept':'application/json'},
-          body: JSON.stringify({ maxRpm: f.maxRpm.value, maxRps: f.maxRps.value, maxConcurrent: f.maxConcurrent.value })
-        });
-        var j = await res.json();
-        btn.textContent = j.ok ? 'Saved ✓' : ('Fail: ' + (j.error||''));
-      } catch(err){ btn.textContent = 'Error'; }
-      setTimeout(function(){ btn.textContent = old; btn.disabled = false; }, 1500);
-    });
-  });
-
-  // Per-workspace auto-tune toggle.
-  document.querySelectorAll('.autotune-cb').forEach(function(cb){
-    cb.addEventListener('change', async function(){
-      cb.disabled = true;
-      try {
-        await fetch('/api/queue/workspaces/' + cb.dataset.id + '/autotune', {
-          method:'POST', headers:{'Content-Type':'application/json','Accept':'application/json'},
-          body: JSON.stringify({ enabled: cb.checked })
+          body: JSON.stringify({ enabled: true })
         });
         location.reload();
-      } catch(e){ cb.disabled = false; cb.checked = !cb.checked; }
+      } catch(e){ b.disabled = false; b.textContent = 'Hand to Auto'; }
     });
   });
 </script>

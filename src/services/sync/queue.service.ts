@@ -280,10 +280,11 @@ const RATE_PROFILES = {
 const FAST_MODE_KEY = 'sync.fastMode';
 
 /**
- * Toggle the fast/turbo profile. This only flips a flag — it does NOT overwrite
- * per-workspace rate limits, so a workspace with a manual override keeps its
- * values. The flag changes the DEFAULT profile (NORMAL vs FAST) used by any
- * workspace that has no override row (see getRateConfig / fastModeDefault).
+ * Switch the sync Mode (Normal ↔ FAST). Mode is the single operator knob: it
+ * sets the auto-tuner's ceiling and climb rate. Flipping it also turns auto-tune
+ * ON for every active workspace and seeds a sane starting rpm, so the system
+ * takes over management of rpm/concurrency/rps/min-delay from that point — the
+ * operator never has to touch per-workspace numbers.
  */
 export async function setFastMode(enabled: boolean, by?: string): Promise<void> {
   await prisma.systemSetting.upsert({
@@ -291,7 +292,19 @@ export async function setFastMode(enabled: boolean, by?: string): Promise<void> 
     create: { key: FAST_MODE_KEY, value: enabled ? 'true' : 'false' },
     update: { value: enabled ? 'true' : 'false' },
   });
-  invalidateRateConfig(); // clear all so un-overridden workspaces pick up the new default
+  // Hand every active workspace to the auto-tuner with a healthy seed so it
+  // climbs from a useful floor rather than the conservative default.
+  const seedRpm = enabled ? 600 : 200;
+  const seed = { maxRpm: seedRpm, maxRps: Math.ceil(seedRpm / 30), maxConcurrent: Math.max(6, Math.ceil(seedRpm / 60)), minDelayMs: Math.max(5, Math.floor(60000 / seedRpm)) };
+  const workspaces = await prisma.fastTestWorkspace.findMany({ where: { isActive: true, deletedAt: null }, select: { id: true } });
+  for (const ws of workspaces) {
+    await prisma.workspaceRateLimit.upsert({
+      where: { workspaceId: ws.id },
+      create: { workspaceId: ws.id, autoTune: true, ...seed },
+      update: { autoTune: true },
+    });
+    invalidateRateConfig(ws.id);
+  }
   void by;
 }
 

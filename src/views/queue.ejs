@@ -58,6 +58,7 @@
       <button class="btn <%= controlState.fastMode ? 'secondary' : '' %> sm" id="toggleFast" data-fast="<%= controlState.fastMode %>">
         <%= controlState.fastMode ? 'Switch to Normal' : 'Enable Fast Sync ⚡' %>
       </button>
+      <div class="muted-sm" style="font-size:11px;margin-top:3px">The system auto-tunes every workspace's rate to FastTest's live capacity within this mode — no manual limits needed.</div>
     </span>
     <span style="border-left:1px solid #ccc;padding-left:14px">
       Strategy: <strong style="color:<%= controlState.syncMode === 'SWEEP' ? '#38bdf8' : '#94a3b8' %>"><%= controlState.syncMode === 'SWEEP' ? '🔁 Sequential Sweep' : '⚙️ Adaptive (per-status)' %></strong>

@@ -2,42 +2,55 @@ import { prisma } from '../../db/prisma';
 import { logger } from '../../lib/logger';
 import { rollingStats } from './adaptive.service';
 import { invalidateRateConfig } from './rate-limiter.service';
+import { isFastMode } from './queue.service';
 
 /**
  * Auto-tune per-workspace throughput with AIMD (additive-increase /
  * multiplicative-decrease — the same principle TCP uses to find a link's
- * capacity). While the workspace is healthy we nudge maxRpm up to discover the
- * ceiling; the moment FastTest pushes back (429s, errors, or latency spikes) we
- * cut it hard. Over a few minutes maxRpm settles just under what FastTest
- * tolerates — no manual guessing.
+ * capacity). While the workspace is healthy we nudge maxRpm up toward the
+ * mode's ceiling; the moment FastTest pushes back (429s, errors, or latency
+ * spikes) we cut it hard. Over a few minutes maxRpm settles just under what
+ * FastTest tolerates — no manual guessing.
  *
- * Only workspaces with rateLimit.autoTune = true are touched. maxRpm on that
- * row holds the current tuned value; maxConcurrent tracks it loosely.
+ * The single knob an operator touches is the Mode (Normal vs FAST): it sets the
+ * ceiling and how aggressively we climb. Everything else — rpm, concurrency,
+ * rps, min-delay — is derived and self-managed per workspace.
  */
 
 const FLOOR_RPM = 30;      // never tune below this
-const CEIL_RPM = 3000;     // hard safety cap
-const INCREASE = 30;       // additive step up per healthy tick (rpm)
-const DECREASE = 0.5;      // multiplicative cut on stress
 const MIN_SAMPLES = 20;    // need this many requests in the window to judge
 // Health thresholds — stay well clear of FastTest pushback.
 const MAX_P95_MS = 3000;
 const MAX_ERROR_RATE = 0.05;
 
+// Per-mode tuning envelope. FAST reaches for a high ceiling and climbs quickly;
+// NORMAL stays conservative. Backoff on stress is always aggressive (halve).
+const MODE_TUNING = {
+  NORMAL: { ceil: 600, increase: 30 },
+  FAST: { ceil: 3000, increase: 120 },
+};
+
 export async function autoTuneRateLimits(now: () => number = () => Date.now()): Promise<void> {
   const rows = await prisma.workspaceRateLimit.findMany({ where: { autoTune: true } });
+  if (!rows.length) return;
+  const tuning = (await isFastMode().catch(() => false)) ? MODE_TUNING.FAST : MODE_TUNING.NORMAL;
   for (const row of rows) {
     try {
       const s = await rollingStats(row.workspaceId, now);
-      // Not enough traffic yet to make a decision — hold steady.
-      if (s.count < MIN_SAMPLES) continue;
 
       const stressed = s.http429 > 0 || s.errorRate >= MAX_ERROR_RATE || s.p95 >= MAX_P95_MS;
       let next = row.maxRpm;
       if (stressed) {
-        next = Math.max(FLOOR_RPM, Math.floor(row.maxRpm * DECREASE));
+        next = Math.max(FLOOR_RPM, Math.floor(row.maxRpm * 0.5));
+      } else if (row.maxRpm > tuning.ceil) {
+        // Mode was lowered (FAST → NORMAL): ease down toward the new ceiling.
+        next = Math.max(tuning.ceil, Math.floor(row.maxRpm * 0.7));
+      } else if (s.count < MIN_SAMPLES) {
+        // Not enough traffic to prove health — hold, but still fix stale
+        // derived limits below.
+        next = row.maxRpm;
       } else {
-        next = Math.min(CEIL_RPM, row.maxRpm + INCREASE);
+        next = Math.min(tuning.ceil, row.maxRpm + tuning.increase);
       }
 
       // Derive the companion limits so rpm is always the binding constraint —
