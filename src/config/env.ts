@@ -76,7 +76,10 @@ export const env = {
     rateLimitPerMinute: int('FASTTEST_RATE_LIMIT_PER_MINUTE', 300),
     maxRetries: int('SYNC_MAX_RETRIES', 3),
     schedulerEnabled: bool('SCHEDULER_ENABLED', true),
-    schedulerIntervalMs: int('SCHEDULER_INTERVAL_MS', 30000),
+    // Top up the queue every 10s (was 30s): with a fast worker a 30s gap let the
+    // queue drain to empty between ticks, so throughput sawtoothed (spikes then
+    // 0). More frequent, deduped top-ups keep it steadily fed.
+    schedulerIntervalMs: int('SCHEDULER_INTERVAL_MS', 10000),
     jobLockTtlMs: int('SYNC_JOB_LOCK_TTL_MS', 60000),
     stalledJobMs: int('SYNC_STALLED_JOB_MS', 120000),
     heartbeatMs: int('WORKER_HEARTBEAT_MS', 10000),
