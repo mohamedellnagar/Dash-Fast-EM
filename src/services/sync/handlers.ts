@@ -12,7 +12,7 @@ import { acquireSlot } from './rate-limiter.service';
 import { currentThrottle } from './adaptive.service';
 import { recordSuccess, recordFailure } from './circuit-breaker.service';
 import { computeScheduling } from './scheduler.service';
-import { enqueue, retryFailedJobs } from './queue.service';
+import { enqueue, retryFailedJobs, pausedSubjects, pausedAcademicYears } from './queue.service';
 import { shouldFetchResults } from './policy';
 
 export type JobOutcome =
@@ -151,8 +151,17 @@ async function handleAuthenticate(job: any, ws: ResolvedWorkspace, client: FastT
 
 // Batch jobs fan out child status jobs (no direct API call).
 async function enqueueBatch(where: any, extra: Partial<{ subject: string }> = {}): Promise<number> {
+  // Batch paths (workspace / school / active-exams) must honour the same
+  // subject/year pauses the scheduler does — otherwise pausing a subject is
+  // silently bypassed and its registrations keep getting enqueued.
+  const [pausedSubs, pausedYears] = await Promise.all([pausedSubjects(), pausedAcademicYears()]);
   const regs = await prisma.examRegistration.findMany({
-    where: { deletedAt: null, ...where },
+    where: {
+      deletedAt: null,
+      ...(pausedSubs.length ? { examSubject: { notIn: pausedSubs } } : {}),
+      ...(pausedYears.length ? { academicYear: { notIn: pausedYears } } : {}),
+      ...where,
+    },
     select: { id: true, workspaceId: true, examName: true, schoolId: true, testCodeNormalized: true },
     take: 2000,
   });
