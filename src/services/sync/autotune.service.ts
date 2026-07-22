@@ -25,9 +25,12 @@ const MAX_ERROR_RATE = 0.05;
 
 // Per-mode tuning envelope. FAST reaches for a high ceiling and climbs quickly;
 // NORMAL stays conservative. Backoff on stress is always aggressive (halve).
+// FAST climbs aggressively (reaches its ceiling from a 600 seed in ~5 ticks
+// instead of ~20) so recovering after a mode change isn't a 10-minute crawl.
+// Backoff on real stress is still an immediate halving, so overshooting is safe.
 const MODE_TUNING = {
-  NORMAL: { ceil: 600, increase: 30 },
-  FAST: { ceil: 3000, increase: 120 },
+  NORMAL: { ceil: 600, increase: 60 },
+  FAST: { ceil: 3000, increase: 500 },
 };
 
 export async function autoTuneRateLimits(now: () => number = () => Date.now()): Promise<void> {
