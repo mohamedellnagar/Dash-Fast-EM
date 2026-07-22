@@ -59,13 +59,13 @@ async function handleStatus(job: any, ws: ResolvedWorkspace, client: FastTestCli
   const g = await gate(ws.workspaceId);
   if (!g.ok) return { kind: 'RESCHEDULE', delayMs: g.delayMs };
 
-  // Enter QUEUED (bridge from any rest-state) then SYNCING_STATUS.
-  await transitionState(reg.id, SYNC_STATE.QUEUED, { jobId: job.id, correlationId: job.correlationId });
-  await transitionState(reg.id, SYNC_STATE.SYNCING_STATUS, { jobId: job.id, correlationId: job.correlationId });
+  // Begin syncing directly from the current rest-state (transient marker, no
+  // history row) — skips the QUEUED bridge and its extra writes.
+  await transitionState(reg.id, SYNC_STATE.SYNCING_STATUS, { fromState: reg.syncState, jobId: job.id, correlationId: job.correlationId, skipHistory: true });
   try {
     const { dashboardStatus } = await fetchAndPersistStatus(reg, ws, client);
     await recordSuccess(ws.workspaceId);
-    await transitionState(reg.id, SYNC_STATE.STATUS_SYNCED, { jobId: job.id });
+    await transitionState(reg.id, SYNC_STATE.STATUS_SYNCED, { fromState: SYNC_STATE.SYNCING_STATUS, jobId: job.id });
 
     // Recompute scheduling from the fresh status.
     const hasResults = (await prisma.fastTestResult.count({ where: { registrationId: reg.id } })) > 0;
@@ -79,7 +79,7 @@ async function handleStatus(job: any, ws: ResolvedWorkspace, client: FastTestCli
     if (shouldFetchResults(dashboardStatus) && !hasResults) {
       await enqueue({ jobType: JOB_TYPE.SYNC_REGISTRATION_RESULTS, workspaceId: ws.workspaceId, registrationId: reg.id, subject: reg.examName, schoolId: reg.schoolId, testCodeNormalized: reg.testCodeNormalized });
     } else if (dashboardStatus === DASHBOARD_STATUS.COMPLETED) {
-      await transitionState(reg.id, SYNC_STATE.COMPLETED, { jobId: job.id });
+      await transitionState(reg.id, SYNC_STATE.COMPLETED, { fromState: SYNC_STATE.STATUS_SYNCED, jobId: job.id });
     }
     invalidate(CACHE_KEYS.ANALYTICS);
     return { kind: 'DONE' };
@@ -87,7 +87,7 @@ async function handleStatus(job: any, ws: ResolvedWorkspace, client: FastTestCli
     const outcome = classifyFromError(e, '/tests/registration/{code}/status');
     if (outcome.kind === 'FAIL') {
       await recordFailure(ws.workspaceId, outcome.category);
-      await transitionState(reg.id, errorStateFor[outcome.category] ?? SYNC_STATE.API_ERROR, { jobId: job.id, reason: outcome.message });
+      await transitionState(reg.id, errorStateFor[outcome.category] ?? SYNC_STATE.API_ERROR, { fromState: SYNC_STATE.SYNCING_STATUS, jobId: job.id, reason: outcome.message });
     }
     return outcome;
   }
@@ -100,15 +100,15 @@ async function handleResults(job: any, ws: ResolvedWorkspace, client: FastTestCl
   const g = await gate(ws.workspaceId);
   if (!g.ok) return { kind: 'RESCHEDULE', delayMs: g.delayMs };
 
-  // Bridge to QUEUED then SYNCING_RESULTS so the transition is valid from any rest-state.
-  await transitionState(reg.id, SYNC_STATE.QUEUED, { jobId: job.id, correlationId: job.correlationId });
-  await transitionState(reg.id, SYNC_STATE.SYNCING_RESULTS, { jobId: job.id, correlationId: job.correlationId });
+  // Begin syncing results directly from the current rest-state (transient
+  // marker, no history row) — skips the QUEUED bridge and its extra writes.
+  await transitionState(reg.id, SYNC_STATE.SYNCING_RESULTS, { fromState: reg.syncState, jobId: job.id, correlationId: job.correlationId, skipHistory: true });
   try {
     await fetchAndPersistResults(reg, ws, client);
     await recordSuccess(ws.workspaceId);
-    await transitionState(reg.id, SYNC_STATE.RESULTS_SYNCED, { jobId: job.id });
+    await transitionState(reg.id, SYNC_STATE.RESULTS_SYNCED, { fromState: SYNC_STATE.SYNCING_RESULTS, jobId: job.id });
     if (reg.dashboardStatus === DASHBOARD_STATUS.COMPLETED) {
-      await transitionState(reg.id, SYNC_STATE.COMPLETED, { jobId: job.id });
+      await transitionState(reg.id, SYNC_STATE.COMPLETED, { fromState: SYNC_STATE.RESULTS_SYNCED, jobId: job.id });
       // Completed + results now stored → terminal. Push nextSyncAt far out so
       // the scheduler never re-syncs this registration again.
       const sched = computeScheduling({ ...reg, hasResults: true }, Date.now());
@@ -123,7 +123,7 @@ async function handleResults(job: any, ws: ResolvedWorkspace, client: FastTestCl
     const outcome = classifyFromError(e, '/tests/registration/{code}/results');
     if (outcome.kind === 'FAIL') {
       await recordFailure(ws.workspaceId, outcome.category);
-      await transitionState(reg.id, errorStateFor[outcome.category] ?? SYNC_STATE.API_ERROR, { jobId: job.id, reason: outcome.message });
+      await transitionState(reg.id, errorStateFor[outcome.category] ?? SYNC_STATE.API_ERROR, { fromState: SYNC_STATE.SYNCING_RESULTS, jobId: job.id, reason: outcome.message });
     }
     return outcome;
   }
