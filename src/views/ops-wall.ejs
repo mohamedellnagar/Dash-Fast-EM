@@ -334,18 +334,26 @@
       }catch(e){}
     }
 
-    async function refresh(){
+    // refresh(bundle): when a subject filter is active we must fetch the filtered
+    // data; otherwise we render straight from the shared live SSE snapshot.
+    async function refresh(bundle){
       try{
-        var q = qs();
         var ov, schools, subj, grades, exam, part;
-        [ov, schools, subj, grades, exam, part] = await Promise.all([
-          j('/api/dashboard/overview'+q),
-          j('/api/dashboard/schools'+q).catch(function(){return {schools:[]};}),
-          j('/api/dashboard/subjects'+q).catch(function(){return {subjects:[]};}),
-          j('/api/dashboard/completion-by-grade'+q).catch(function(){return {grades:[]};}),
-          j('/api/dashboard/exam-analytics'+q).catch(function(){return null;}),
-          j('/api/dashboard/participation'+q).catch(function(){return null;})
-        ]);
+        if (bundle && !pageSel.size) {
+          ov=bundle.overview; schools=bundle.schools||{schools:[]}; subj=bundle.subjects||{subjects:[]};
+          grades=bundle.grades||{grades:[]}; exam=bundle.exam; part=bundle.participation;
+        } else {
+          var q = qs();
+          [ov, schools, subj, grades, exam, part] = await Promise.all([
+            j('/api/dashboard/overview'+q),
+            j('/api/dashboard/schools'+q).catch(function(){return {schools:[]};}),
+            j('/api/dashboard/subjects'+q).catch(function(){return {subjects:[]};}),
+            j('/api/dashboard/completion-by-grade'+q).catch(function(){return {grades:[]};}),
+            j('/api/dashboard/exam-analytics'+q).catch(function(){return null;}),
+            j('/api/dashboard/participation'+q).catch(function(){return null;})
+          ]);
+        }
+        if(!ov) return;
 
         var sc = schools.schools||[];
         // Participation: targeted vs participating + achieved gauge
@@ -378,15 +386,29 @@
         }
       }catch(e){}
     }
-    async function refreshHealth(){
-      try{ var h=await j('/api/fasttest/health');
+    function refreshHealth(h){
+      try{ if(!h) return;
         var hp=document.getElementById('healthPill');
         var icon=h.verdict==='HEALTHY'?'🟢':(h.verdict==='DEGRADED'?'🟡':'🔴');
         hp.textContent=icon+' FastTest: '+h.verdict; hp.style.color=h.verdict==='HEALTHY'?'#22c55e':(h.verdict==='DEGRADED'?'#f59e0b':'#ef4444');
       }catch(e){}
     }
-    loadSubjectChips(); refresh(); refreshHealth();
-    setInterval(refresh, 6000); setInterval(refreshHealth, 8000);
+
+    // Shared live snapshot drives the wall (unfiltered). When a subject filter is
+    // active, the SSE frame just triggers a filtered re-fetch via refresh().
+    var lastBundle=null;
+    loadSubjectChips();
+    (function connectLive(){
+      var es=new EventSource('/api/dashboard/live');
+      es.onmessage=function(ev){
+        var b; try{ b=JSON.parse(ev.data); }catch(e){ return; }
+        lastBundle=b;
+        refresh(b);
+        refreshHealth(b.health);
+      };
+    })();
+    // When the filter changes we can't use the shared snapshot — fetch filtered.
+    // (refresh() already handles pageSel internally; this just re-runs it.)
   </script>
 </body>
 </html>

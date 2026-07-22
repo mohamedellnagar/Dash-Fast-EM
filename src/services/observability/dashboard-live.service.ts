@@ -24,7 +24,7 @@ let lastPayload: string | null = null;
 
 async function computeSnapshot() {
   const EMPTY = {}; // unscoped global view
-  const [overview, subjects, grades, participation, exam, feed, today, queue, control, health, apiHealth] = await Promise.all([
+  const [overview, subjects, grades, participation, exam, feed, today, queue, control, health, apiHealth, schools] = await Promise.all([
     dash.overview(EMPTY),
     dash.subjectsSummary(EMPTY).then((subjects) => ({ subjects })),
     dash.completionByGrade(EMPTY).then((grades) => ({ grades })),
@@ -36,8 +36,9 @@ async function computeSnapshot() {
     getSyncControlState().catch(() => null),
     getFastTestHealth().catch(() => null),
     dash.apiHealth().catch(() => null),
+    dash.schoolsSummary(EMPTY).then((schools) => ({ schools })).catch(() => ({ schools: [] })),
   ]);
-  return { overview, subjects, grades, participation, exam, feed, today, queue, control, health, apiHealth, at: Date.now() };
+  return { overview, subjects, grades, participation, exam, feed, today, queue, control, health, apiHealth, schools, at: Date.now() };
 }
 
 async function tick() {
