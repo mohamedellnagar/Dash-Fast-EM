@@ -6,7 +6,7 @@ import { requireAuth, requirePermission } from '../middleware/auth';
 import { audit } from '../services/audit.service';
 import {
   queueStats, cancelJob, retryJob, retryFailedJobs, requeueDeadLetter,
-  pauseWorkspace, pauseJobType, pauseGlobal, setSyncWindow, getSyncControlState,
+  pauseWorkspace, pauseJobType, pauseGlobal, setSyncWindow, getSyncControlState, setGlobalMaxRpm,
   pauseSubject, getSubjectSyncControls, setFastMode, setSyncMode,
   pauseAcademicYear, getAcademicYearSyncControls,
 } from '../services/sync/queue.service';
@@ -170,6 +170,16 @@ syncAdminRouter.post('/api/queue/window', requireAuth, requirePermission(PERMISS
   if (!p.success) return res.status(400).json({ error: 'startHour/endHour must be 0-23 or null' });
   await setSyncWindow(p.data.startHour, p.data.endHour, req.principal!.email);
   await audit({ ...actor(req), action: 'SYNC_WINDOW_SET', detail: `start=${p.data.startHour} end=${p.data.endHour}` });
+  res.json({ ok: true, ...(await getSyncControlState()) });
+});
+
+// Global sync/min ceiling across all workspaces (0 / null = unlimited).
+const globalRpmSchema = z.object({ rpm: z.number().int().min(0).max(100000).nullable() });
+syncAdminRouter.post('/api/queue/global-rate', requireAuth, requirePermission(PERMISSION.QUEUE_MANAGE), async (req, res) => {
+  const p = globalRpmSchema.safeParse({ rpm: req.body?.rpm === '' || req.body?.rpm == null ? null : Number(req.body?.rpm) });
+  if (!p.success) return res.status(400).json({ error: 'rpm must be 0-100000 or null' });
+  await setGlobalMaxRpm(p.data.rpm, req.principal!.email);
+  await audit({ ...actor(req), action: 'SYNC_GLOBAL_RATE_SET', detail: `rpm=${p.data.rpm ?? 'unlimited'}` });
   res.json({ ok: true, ...(await getSyncControlState()) });
 });
 

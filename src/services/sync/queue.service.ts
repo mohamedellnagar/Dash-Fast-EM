@@ -109,6 +109,11 @@ export async function claimNext(workerId: string, now: () => number = () => Date
   // Global on/off switch + time-window: when sync isn't allowed, claim nothing.
   if (!(await syncAllowedNow(now))) return null;
 
+  // Operator's global sync/min ceiling — one token per claim across all
+  // workspaces. When the bucket is dry the runner idles this tick.
+  const maxRpm = await getGlobalMaxRpm();
+  if (!globalRateAllows(maxRpm, now())) return null;
+
   // Global concurrency ceiling.
   const globalRunning = await prisma.syncJob.count({ where: { status: JOB_STATUS.RUNNING } });
   if (globalRunning >= env.sync.globalMaxConcurrent) return null;
@@ -446,6 +451,45 @@ export async function pauseGlobal(paused: boolean, by?: string): Promise<void> {
  * time (0-23). Pass null/null to clear the window (sync always allowed).
  * A window where start > end wraps past midnight (e.g. 22 → 6).
  */
+// ---- Global sync-rate ceiling (operator-set, across all workspaces) ----
+const GLOBAL_MAX_RPM_KEY = 'sync.globalMaxRpm';
+
+// Cached read of the operator's global sync/min cap (0 / empty = unlimited).
+const globalMaxRpmCached = ttlCache(async () => {
+  const row = await prisma.systemSetting.findUnique({ where: { key: GLOBAL_MAX_RPM_KEY } });
+  const n = Number(row?.value ?? '');
+  return Number.isFinite(n) && n > 0 ? Math.floor(n) : 0;
+}, CONTROL_TTL_MS);
+
+export async function getGlobalMaxRpm(): Promise<number> {
+  return globalMaxRpmCached();
+}
+
+export async function setGlobalMaxRpm(rpm: number | null, by?: string): Promise<void> {
+  const value = rpm == null || rpm <= 0 ? '' : String(Math.floor(rpm));
+  await prisma.systemSetting.upsert({
+    where: { key: GLOBAL_MAX_RPM_KEY }, create: { key: GLOBAL_MAX_RPM_KEY, value }, update: { value },
+  });
+  void by;
+}
+
+// In-process token bucket enforcing the global sync/min cap at claim time. The
+// worker runs as a single replica, so one process-wide bucket is authoritative;
+// every claimed job consumes a token, and when the bucket is empty the runners
+// idle — capping total throughput at exactly the operator's number.
+const globalBucket = { tokens: 0, lastRefill: 0, rpm: 0 };
+function globalRateAllows(rpm: number, now: number): boolean {
+  if (rpm <= 0) return true; // unlimited
+  if (globalBucket.rpm !== rpm) { globalBucket.rpm = rpm; globalBucket.tokens = Math.min(globalBucket.tokens, rpm); }
+  const perSec = rpm / 60;
+  const elapsed = (now - globalBucket.lastRefill) / 1000;
+  globalBucket.tokens = Math.min(rpm, globalBucket.tokens + elapsed * perSec);
+  globalBucket.lastRefill = now;
+  if (globalBucket.tokens < 1) return false;
+  globalBucket.tokens -= 1;
+  return true;
+}
+
 export async function setSyncWindow(startHour: number | null, endHour: number | null, by?: string): Promise<void> {
   const start = startHour == null ? '' : String(startHour);
   const end = endHour == null ? '' : String(endHour);
@@ -490,8 +534,8 @@ export function hourInTimezone(ms: number, timeZone: string): number {
 }
 
 /** Current control state for UI/status. */
-export async function getSyncControlState(): Promise<{ globalPaused: boolean; windowStart: number | null; windowEnd: number | null; allowedNow: boolean; fastMode: boolean; frozen: boolean; connectionTestDisabled: boolean; syncMode: SyncMode; timezone: string; currentHour: number }> {
-  const [global, rows, allowedNow, fastMode, frozen, connectionTestDisabled, syncMode] = await Promise.all([
+export async function getSyncControlState(): Promise<{ globalPaused: boolean; windowStart: number | null; windowEnd: number | null; allowedNow: boolean; fastMode: boolean; frozen: boolean; connectionTestDisabled: boolean; syncMode: SyncMode; timezone: string; currentHour: number; globalMaxRpm: number }> {
+  const [global, rows, allowedNow, fastMode, frozen, connectionTestDisabled, syncMode, globalMaxRpm] = await Promise.all([
     prisma.queueControl.findFirst({ where: { scope: 'GLOBAL', scopeKey: 'ALL' } }),
     prisma.systemSetting.findMany({ where: { key: { in: [WINDOW_START_KEY, WINDOW_END_KEY] } } }),
     syncAllowedNow(),
@@ -499,6 +543,7 @@ export async function getSyncControlState(): Promise<{ globalPaused: boolean; wi
     isFastTestFrozen(),
     isConnectionTestDisabled(),
     getSyncMode(),
+    getGlobalMaxRpm(),
   ]);
   const map = new Map(rows.map((r) => [r.key, r.value]));
   const parse = (v?: string) => (v == null || v === '' || Number.isNaN(Number(v)) ? null : Number(v));
@@ -513,6 +558,7 @@ export async function getSyncControlState(): Promise<{ globalPaused: boolean; wi
     syncMode,
     timezone: env.timezone,
     currentHour: hourInTimezone(Date.now(), env.timezone),
+    globalMaxRpm,
   };
 }
 
