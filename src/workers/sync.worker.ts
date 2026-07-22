@@ -120,7 +120,11 @@ export function startWorkerLoops(): { stop: () => void; done: Promise<void> } {
         logger.error({ err: (e as Error).message }, 'runner error');
         return null;
       });
-      if (outcome === null) await sleep(1000); // idle backoff
+      // A full 1s idle sleep starved throughput: when a runner briefly finds no
+      // claimable job (lost a claim race, or the due set momentarily thin) it sat
+      // out a whole second while 10k jobs waited. Back off only ~120ms so runners
+      // re-check quickly; with real idle (empty queue) that's still negligible load.
+      if (outcome === null) await sleep(120);
     }
   };
   const runners = Array.from({ length: env.sync.concurrency }, () => runner());

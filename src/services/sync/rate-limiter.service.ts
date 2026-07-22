@@ -96,6 +96,13 @@ export class TokenBucket {
     this.windowStart = now;
   }
 
+  /** Adopt a new config (e.g. auto-tune raised the limits) without resetting the
+   * live token/window state — otherwise a cached bucket keeps enforcing the rpm
+   * it was created with and throttles far below the tuned ceiling. */
+  setConfig(cfg: RateConfig): void {
+    this.cfg = cfg;
+  }
+
   /** Adaptive multiplier ∈ (0,1] scales effective rps/rpm down under stress. */
   tryAcquire(now: number, throttle = 1): { allowed: boolean; retryAfterMs: number } {
     const rps = Math.max(0.1, this.cfg.maxRps * throttle);
@@ -132,6 +139,8 @@ export async function acquireSlot(workspaceId: string, throttle = 1, now: () => 
   if (!b) {
     b = new TokenBucket(cfg, now());
     buckets.set(workspaceId, b);
+  } else {
+    b.setConfig(cfg); // pick up auto-tune / manual changes to the limits
   }
   return b.tryAcquire(now(), throttle);
 }
