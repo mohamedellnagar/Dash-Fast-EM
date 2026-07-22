@@ -9,18 +9,19 @@ import { logger } from '../../lib/logger';
 // a probe success closes the circuit, a probe failure re-opens it.
 
 async function getOrCreate(workspaceId: string) {
-  // Race-safe get-or-create: Prisma's upsert is not atomic, so under worker
-  // concurrency two callers can both attempt the INSERT and one hits a PRIMARY
-  // key violation. Read first, and if a concurrent create wins the race, re-read.
+  // Race-safe get-or-create under worker concurrency. `create` throws a PRIMARY
+  // key violation when two workers insert at once — and Prisma logs that as a
+  // `prisma:error` even when caught, spamming the logs. `createMany` with
+  // skipDuplicates compiles to INSERT IGNORE: atomic and silent on conflict.
   const existing = await prisma.workspaceCircuitBreaker.findUnique({ where: { workspaceId } });
   if (existing) return existing;
-  try {
-    return await prisma.workspaceCircuitBreaker.create({ data: { workspaceId, state: CIRCUIT_STATE.CLOSED } });
-  } catch {
-    const row = await prisma.workspaceCircuitBreaker.findUnique({ where: { workspaceId } });
-    if (row) return row;
-    throw new Error(`failed to get-or-create circuit breaker for ${workspaceId}`);
-  }
+  await prisma.workspaceCircuitBreaker.createMany({
+    data: [{ workspaceId, state: CIRCUIT_STATE.CLOSED }],
+    skipDuplicates: true,
+  });
+  const row = await prisma.workspaceCircuitBreaker.findUnique({ where: { workspaceId } });
+  if (row) return row;
+  throw new Error(`failed to get-or-create circuit breaker for ${workspaceId}`);
 }
 
 export interface BreakerDecision {
