@@ -313,6 +313,7 @@ model ExamRegistration {
   @@index([deletedAt, dashboardStatus])
   @@index([lastSyncAt]) // live sync feed + SWEEP round-robin order
   @@index([statusChangedAt]) // today's activity (schools/grades with status changes)
+  @@index([deletedAt, updatedAt]) // Live Monitoring table default sort (recently-updated first) — avoids a filesort over all rows
 }
 
 // ---------------------------------------------------------------------------
