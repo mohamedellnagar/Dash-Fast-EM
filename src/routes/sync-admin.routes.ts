@@ -94,10 +94,13 @@ syncAdminRouter.post('/api/queue/workspaces/:id/rate-limit', requireAuth, requir
   const ws = await prisma.fastTestWorkspace.findFirst({ where: { id: req.params.id, deletedAt: null } });
   if (!ws) return res.status(404).json({ error: 'Workspace not found' });
   // A manual rate-limit edit turns auto-tune off — the operator is taking over.
+  // Derive minDelayMs from rpm so a stale 200ms spacing can't silently cap
+  // throughput below the chosen rpm.
+  const minDelayMs = Math.max(5, Math.floor(60000 / p.data.maxRpm));
   await prisma.workspaceRateLimit.upsert({
     where: { workspaceId: req.params.id },
-    create: { workspaceId: req.params.id, maxRpm: p.data.maxRpm, maxRps: p.data.maxRps, maxConcurrent: p.data.maxConcurrent, autoTune: false },
-    update: { maxRpm: p.data.maxRpm, maxRps: p.data.maxRps, maxConcurrent: p.data.maxConcurrent, autoTune: false },
+    create: { workspaceId: req.params.id, maxRpm: p.data.maxRpm, maxRps: p.data.maxRps, maxConcurrent: p.data.maxConcurrent, minDelayMs, autoTune: false },
+    update: { maxRpm: p.data.maxRpm, maxRps: p.data.maxRps, maxConcurrent: p.data.maxConcurrent, minDelayMs, autoTune: false },
   });
   invalidateRateConfig(req.params.id);
   await audit({ ...actor(req), action: 'WORKSPACE_RATE_LIMIT', entityType: 'FastTestWorkspace', entityId: req.params.id, detail: `rpm=${p.data.maxRpm} rps=${p.data.maxRps} conc=${p.data.maxConcurrent}` });
