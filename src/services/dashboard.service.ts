@@ -94,8 +94,9 @@ export async function statusDistribution(where: Prisma.ExamRegistrationWhereInpu
 
 /** Participation coverage: how many of the targeted schools/students actually
  * participated (started the exam). "Participating" = has a started status. */
-export async function participationCoverage(programType?: string) {
+export async function participationCoverage(programType?: string, subjects?: string[]) {
   const prog = programType ? Prisma.sql`AND r.programType = ${programType}` : Prisma.empty;
+  const subj = subjects && subjects.length ? Prisma.sql`AND r.examSubject IN (${Prisma.join(subjects)})` : Prisma.empty;
   const rows = await prisma.$queryRaw<Array<{ ts: bigint; ps: bigint; tst: bigint; pst: bigint }>>`
     SELECT
       COUNT(DISTINCT r.schoolId) ts,
@@ -103,7 +104,7 @@ export async function participationCoverage(programType?: string) {
       COUNT(DISTINCT r.emiratesId) tst,
       COUNT(DISTINCT CASE WHEN r.dashboardStatus IN ('COMPLETED','IN_PROGRESS','UNDER_REVIEW','REVIEW_FAILED') THEN r.emiratesId END) pst
     FROM ExamRegistration r
-    WHERE r.deletedAt IS NULL ${prog}`;
+    WHERE r.deletedAt IS NULL ${prog} ${subj}`;
   const r = rows[0] ?? { ts: 0n, ps: 0n, tst: 0n, pst: 0n };
   const ts = Number(r.ts), ps = Number(r.ps), tst = Number(r.tst), pst = Number(r.pst);
   const rate = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 100) : 0);
@@ -332,8 +333,9 @@ export async function correctIncorrectSkipped(where: Prisma.ExamRegistrationWher
  * with a rapid-completion (integrity) flag, activity by hour, and daily
  * completion velocity. Scoped by program (SPA/ABA) since the walls are per-program.
  */
-export async function examOperationalAnalytics(programType?: string) {
+export async function examOperationalAnalytics(programType?: string, subjects?: string[]) {
   const prog = programType ? Prisma.sql`AND r.programType = ${programType}` : Prisma.empty;
+  const subj = subjects && subjects.length ? Prisma.sql`AND r.examSubject IN (${Prisma.join(subjects)})` : Prisma.empty;
 
   const [timeBuckets, rapid, byHour, daily] = await Promise.all([
     prisma.$queryRaw<Array<{ label: string; ord: number; n: bigint }>>`
@@ -350,21 +352,21 @@ export async function examOperationalAnalytics(programType?: string) {
         WHEN fr.secondsUsed < 1200 THEN 5 ELSE 6 END AS ord,
         COUNT(*) n
       FROM FastTestResult fr JOIN ExamRegistration r ON r.id = fr.registrationId
-      WHERE fr.secondsUsed IS NOT NULL AND r.deletedAt IS NULL ${prog}
+      WHERE fr.secondsUsed IS NOT NULL AND r.deletedAt IS NULL ${prog} ${subj}
       GROUP BY label, ord ORDER BY ord`,
     prisma.$queryRaw<Array<{ rapid: bigint; total: bigint; avgs: number }>>`
       SELECT SUM(fr.secondsUsed < 120) rapid, COUNT(*) total, ROUND(AVG(fr.secondsUsed)) avgs
       FROM FastTestResult fr JOIN ExamRegistration r ON r.id = fr.registrationId
-      WHERE fr.secondsUsed IS NOT NULL AND r.deletedAt IS NULL ${prog}`,
+      WHERE fr.secondsUsed IS NOT NULL AND r.deletedAt IS NULL ${prog} ${subj}`,
     prisma.$queryRaw<Array<{ h: number; n: bigint }>>`
       SELECT HOUR(fr.startTime) h, COUNT(*) n
       FROM FastTestResult fr JOIN ExamRegistration r ON r.id = fr.registrationId
-      WHERE fr.startTime IS NOT NULL AND r.deletedAt IS NULL ${prog}
+      WHERE fr.startTime IS NOT NULL AND r.deletedAt IS NULL ${prog} ${subj}
       GROUP BY h ORDER BY h`,
     prisma.$queryRaw<Array<{ d: string; n: bigint }>>`
       SELECT DATE_FORMAT(fr.startTime, '%Y-%m-%d') d, COUNT(*) n
       FROM FastTestResult fr JOIN ExamRegistration r ON r.id = fr.registrationId
-      WHERE fr.startTime IS NOT NULL AND r.deletedAt IS NULL ${prog}
+      WHERE fr.startTime IS NOT NULL AND r.deletedAt IS NULL ${prog} ${subj}
       GROUP BY d ORDER BY d DESC LIMIT 45`,
   ]);
 

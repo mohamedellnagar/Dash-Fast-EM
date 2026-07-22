@@ -14,6 +14,14 @@ function whereFrom(req: Request) {
   return { filter, scope, where: buildRegistrationWhere(filter, scope) };
 }
 
+/** Parse the page-wide multi-subject selector (CSV) for the raw-SQL endpoints. */
+function subjectsParam(req: Request): string[] | undefined {
+  const raw = String(req.query.examSubjects || '').trim();
+  if (!raw) return undefined;
+  const list = raw.split(',').map((s) => s.trim()).filter(Boolean);
+  return list.length ? list : undefined;
+}
+
 const view = requirePermission(PERMISSION.DASHBOARD_VIEW);
 
 dashboardApiRouter.get('/overview', view, asyncHandler(async (req, res) => {
@@ -22,7 +30,7 @@ dashboardApiRouter.get('/overview', view, asyncHandler(async (req, res) => {
 }));
 
 dashboardApiRouter.get('/participation', view, asyncHandler(async (req, res) => {
-  res.json(await dash.participationCoverage(String(req.query.programType || '') || undefined));
+  res.json(await dash.participationCoverage(String(req.query.programType || '') || undefined, subjectsParam(req)));
 }));
 
 dashboardApiRouter.get('/todays-activity', view, asyncHandler(async (req, res) => {
@@ -102,7 +110,7 @@ dashboardApiRouter.get('/scores', view, requirePermission(PERMISSION.RESULTS_VIE
 }));
 
 dashboardApiRouter.get('/exam-analytics', view, asyncHandler(async (req, res) => {
-  res.json(await dash.examOperationalAnalytics(String(req.query.programType || '') || undefined));
+  res.json(await dash.examOperationalAnalytics(String(req.query.programType || '') || undefined, subjectsParam(req)));
 }));
 
 dashboardApiRouter.get('/durations', view, asyncHandler(async (req, res) => {

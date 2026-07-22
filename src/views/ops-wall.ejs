@@ -70,12 +70,12 @@
     .fbtns button:hover{color:var(--ink);border-color:#ffffff33}
     .fbtns button.on{background:#3b82f622;border-color:#3b82f688;color:#93c5fd}
     .cap .scount{float:right;font-weight:800;color:var(--dim);text-transform:none;letter-spacing:0}
-    /* funnel: subject chips live in a vertical rail beside the bars, not stacked above them */
-    .funnel .fbody{display:flex;gap:12px;flex:1;min-height:0}
-    #funFilters{flex-direction:column;gap:3px;margin:0;flex:0 0 74px;overflow-y:auto;align-content:flex-start}
-    #funFilters::-webkit-scrollbar{width:5px} #funFilters::-webkit-scrollbar-thumb{background:#ffffff22;border-radius:3px}
-    #funFilters button{padding:4px 6px;font-size:10px;letter-spacing:.3px;width:100%;flex:0 0 auto}
     .funnel #funnel{display:flex;flex-direction:column;justify-content:center;gap:10px;min-height:0;flex:1}
+    /* page-wide subject filter bar under the header */
+    .subjbar{flex:0 0 auto;display:flex;align-items:center;gap:10px;background:linear-gradient(160deg,#1a2338,#131a2b);
+      border:1px solid var(--line);border-radius:14px;padding:8px 14px}
+    .subjbar-lbl{font-size:12px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;flex:0 0 auto}
+    #pageFilters{display:flex;flex-wrap:wrap;gap:6px;flex:1}
     .funnel .fstage{margin-bottom:0}
     .funnel .fstage .fh b{font-size:17px}
     .funnel .fstage .fbar{height:13px}
@@ -99,6 +99,12 @@
     <div class="spacer"></div>
     <span id="clock">--:--:--</span>
   </header>
+
+  <!-- Page-wide subject filter: selecting subjects filters EVERY tile below. -->
+  <section class="subjbar">
+    <span class="subjbar-lbl">📚 Subjects:</span>
+    <div class="fbtns" id="pageFilters"></div>
+  </section>
 
   <section class="kpis">
     <!-- Schools participation -->
@@ -146,10 +152,7 @@
     </div>
     <div class="tile funnel">
       <div class="cap">Exam Status Funnel<span class="scount" id="funScope">All subjects</span></div>
-      <div class="fbody">
-        <div class="fbtns" id="funFilters"></div>
-        <div id="funnel"></div>
-      </div>
+      <div id="funnel" style="flex:1;display:flex;flex-direction:column;justify-content:center"></div>
     </div>
     <div class="tile grade">
       <div class="cap">Completion by Grade</div>
@@ -260,31 +263,44 @@
         .replace(/^Observation form$/i,'OBS')
         .replace(/^Math(ematics)?$/i,'MATH');
     }
-    var allSubjects = [], funSel = new Set(); // empty set = all subjects
+    // ---- Page-wide subject filter ----
+    // The chip list is built once from the FULL subject list; selecting subjects
+    // appends ?examSubjects=... to every fetch so all tiles filter server-side.
+    var pageSel = new Set();          // empty = all subjects
+    var subjMaster = [];              // full list for the chip bar (never shrinks)
 
-    function renderFunFilters(){
-      var box=document.getElementById('funFilters');
-      var want = allSubjects.map(function(s){return s.examSubject;}).join('|');
-      if(box.dataset.keys===want) { syncFunBtns(); return; } // rebuild only when subjects change
-      box.dataset.keys=want;
-      box.innerHTML='<button type="button" data-all="1" class="on">All</button>'+
-        allSubjects.map(function(s){
-          return '<button type="button" data-s="'+s.examSubject.replace(/"/g,'&quot;')+'" title="'+s.examSubject+'">'+shortSubject(s.examSubject)+'</button>';
-        }).join('');
+    function qs(){
+      if(!pageSel.size) return '';
+      return '?examSubjects=' + encodeURIComponent(Array.from(pageSel).join(','));
     }
-    function syncFunBtns(){
-      var box=document.getElementById('funFilters');
+    function renderPageFilters(){
+      var box=document.getElementById('pageFilters');
+      var want = subjMaster.join('|');
+      if(box.dataset.keys!==want){
+        box.dataset.keys=want;
+        box.innerHTML='<button type="button" data-all="1">All</button>'+
+          subjMaster.map(function(name){
+            return '<button type="button" data-s="'+name.replace(/"/g,'&quot;')+'" title="'+name+'">'+shortSubject(name)+'</button>';
+          }).join('');
+      }
       [].forEach.call(box.children,function(b){
-        b.classList.toggle('on', b.dataset.all ? funSel.size===0 : funSel.has(b.dataset.s));
+        b.classList.toggle('on', b.dataset.all ? pageSel.size===0 : pageSel.has(b.dataset.s));
       });
     }
-    function renderFunnel(){
-      var rows = funSel.size ? allSubjects.filter(function(s){return funSel.has(s.examSubject);}) : allSubjects;
-      var agg = rows.reduce(function(a,s){
+    document.getElementById('pageFilters').addEventListener('click', function(e){
+      var b=e.target.closest('button'); if(!b) return;
+      if(b.dataset.all) pageSel.clear();
+      else if(pageSel.has(b.dataset.s)) pageSel.delete(b.dataset.s);
+      else pageSel.add(b.dataset.s);
+      renderPageFilters();
+      refresh(); // re-fetch every tile with the new subject filter
+    });
+    function renderFunnel(subjects){
+      var agg = (subjects||[]).reduce(function(a,s){
         a.total+=s.total||0; a.ns+=(s.NOT_STARTED||0)+(s.NOT_SYNCED||0); a.ip+=s.IN_PROGRESS||0; a.co+=s.COMPLETED||0; return a;
       },{total:0,ns:0,ip:0,co:0});
       document.getElementById('funScope').textContent =
-        (funSel.size ? funSel.size+' subject'+(funSel.size>1?'s':'') : 'All subjects')+' · '+fmt(agg.total);
+        (pageSel.size ? pageSel.size+' subject'+(pageSel.size>1?'s':'') : 'All subjects')+' · '+fmt(agg.total);
       var stages=[
         {nm:'Not Started', v:agg.ns, c:'linear-gradient(90deg,#2563eb,#3b82f6)'},
         {nm:'In Progress', v:agg.ip, c:'linear-gradient(90deg,#d97706,#f59e0b)'},
@@ -295,26 +311,28 @@
         return '<div class="fstage"><div class="fh"><span class="muted">'+s.nm+'</span><b>'+fmt(s.v)+' <span class="dim" style="font-size:12px">'+pct(s.v,agg.total)+'%</span></b></div>'+
           '<div class="fbar"><span style="width:'+w+'%;background:'+s.c+'"></span></div></div>';
       }).join('');
-      syncFunBtns();
     }
-    document.getElementById('funFilters').addEventListener('click', function(e){
-      var b=e.target.closest('button'); if(!b) return;
-      if(b.dataset.all) funSel.clear();
-      else if(funSel.has(b.dataset.s)) funSel.delete(b.dataset.s);
-      else funSel.add(b.dataset.s);
-      renderFunnel();
-    });
+
+    // One-time fetch of the full subject list to populate the filter chips.
+    async function loadSubjectChips(){
+      try{
+        var r = await j('/api/dashboard/subjects');
+        subjMaster = (r.subjects||[]).slice().sort(function(a,b){return b.total-a.total;}).map(function(s){return s.examSubject;});
+        renderPageFilters();
+      }catch(e){}
+    }
 
     async function refresh(){
       try{
+        var q = qs();
         var ov, schools, subj, grades, exam, part;
         [ov, schools, subj, grades, exam, part] = await Promise.all([
-          j('/api/dashboard/overview'),
-          j('/api/dashboard/schools').catch(function(){return {schools:[]};}),
-          j('/api/dashboard/subjects').catch(function(){return {subjects:[]};}),
-          j('/api/dashboard/completion-by-grade').catch(function(){return {grades:[]};}),
-          j('/api/dashboard/exam-analytics').catch(function(){return null;}),
-          j('/api/dashboard/participation').catch(function(){return null;})
+          j('/api/dashboard/overview'+q),
+          j('/api/dashboard/schools'+q).catch(function(){return {schools:[]};}),
+          j('/api/dashboard/subjects'+q).catch(function(){return {subjects:[]};}),
+          j('/api/dashboard/completion-by-grade'+q).catch(function(){return {grades:[]};}),
+          j('/api/dashboard/exam-analytics'+q).catch(function(){return null;}),
+          j('/api/dashboard/participation'+q).catch(function(){return null;})
         ]);
 
         var sc = schools.schools||[];
@@ -338,9 +356,7 @@
 
         hbars('grades', (grades.grades||[]).map(function(g){var gr=String(g.grade||'—');return {l:/grade/i.test(gr)?gr:'Grade '+gr, v:g.completionRate};}), completionColor);
 
-        allSubjects = (subj.subjects||[]).slice().sort(function(a,b){return b.total-a.total;});
-        renderFunFilters();
-        renderFunnel();
+        renderFunnel((subj.subjects||[]));
 
         if(exam && exam.time){
           document.getElementById('t-rapid').textContent=fmt(exam.time.rapidCount);
@@ -357,7 +373,7 @@
         hp.textContent=icon+' FastTest: '+h.verdict; hp.style.color=h.verdict==='HEALTHY'?'#22c55e':(h.verdict==='DEGRADED'?'#f59e0b':'#ef4444');
       }catch(e){}
     }
-    refresh(); refreshHealth();
+    loadSubjectChips(); refresh(); refreshHealth();
     setInterval(refresh, 6000); setInterval(refreshHealth, 8000);
   </script>
 </body>

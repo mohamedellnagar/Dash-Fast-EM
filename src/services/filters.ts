@@ -23,6 +23,10 @@ export const advancedFilterSchema = z.object({
   classCode: trimmed.optional(),
   subjectId: trimmed.optional(),
   examSubject: trimmed.optional(),
+  // Exact multi-subject filter (CSV of ExamSubject values) → examSubject IN (...).
+  // Used by the dashboard's page-wide subject selector; distinct from the
+  // single substring `examSubject` above.
+  examSubjects: z.string().max(2000).optional(),
   examName: trimmed.optional(),
   testCode: trimmed.optional(),
   proctorCode: trimmed.optional(),
@@ -82,6 +86,10 @@ export function buildRegistrationWhere(
   if (f.grade) and.push({ grade: f.grade });
   if (f.classCode) and.push({ classCode: contains(f.classCode) });
   if (f.examSubject) and.push({ examSubject: contains(f.examSubject) });
+  if (f.examSubjects) {
+    const list = f.examSubjects.split(',').map((s) => s.trim()).filter(Boolean);
+    if (list.length) and.push({ examSubject: { in: list } });
+  }
   if (f.examName) and.push({ examName: contains(f.examName) });
   if (f.testCode) and.push({ testCodeNormalized: { contains: f.testCode.replace(/[-\s]/g, '').toUpperCase() } });
   if (f.proctorCode) and.push({ proctorCode: contains(f.proctorCode) });
