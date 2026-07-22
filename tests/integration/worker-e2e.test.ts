@@ -50,7 +50,9 @@ describe('Worker end-to-end (mock transport, durable queue)', () => {
     expect(updated!.dashboardStatus).toBe('IN_PROGRESS');
     expect(updated!.syncState).toBe('STATUS_SYNCED');
     const transitions = await prisma.syncStateTransition.findMany({ where: { registrationId: reg.id } });
-    expect(transitions.some((t) => t.toState === 'SYNCING_STATUS')).toBe(true);
+    // The transient SYNCING_STATUS marker is written without a history row (perf);
+    // the meaningful STATUS_SYNCED transition is still recorded.
+    expect(transitions.some((t) => t.toState === 'SYNCING_STATUS')).toBe(false);
     expect(transitions.some((t) => t.toState === 'STATUS_SYNCED')).toBe(true);
   });
 
