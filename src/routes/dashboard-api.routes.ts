@@ -4,8 +4,22 @@ import { requirePermission, schoolScopeFor } from '../middleware/auth';
 import { asyncHandler } from '../middleware/async-handler';
 import { parseFilter, buildRegistrationWhere } from '../services/filters';
 import * as dash from '../services/dashboard.service';
+import { subscribeDashboardLive } from '../services/observability/dashboard-live.service';
 
 export const dashboardApiRouter = Router();
+
+// Live global snapshot over SSE: one shared timer computes the whole Live
+// Overview bundle every 2s and fans it out to all viewers, so N open screens
+// cost one set of queries instead of N. Scoped users still use the per-request
+// JSON endpoints; this stream is the unfiltered operations wall.
+dashboardApiRouter.get('/live', requirePermission(PERMISSION.DASHBOARD_VIEW), (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache, no-transform');
+  res.setHeader('Connection', 'keep-alive');
+  res.setHeader('X-Accel-Buffering', 'no');
+  res.flushHeaders?.();
+  subscribeDashboardLive(res, () => undefined);
+});
 
 // Build a scoped where-clause from the request (school scope is server-enforced).
 function whereFrom(req: Request) {

@@ -386,19 +386,15 @@
         : '';
     }
 
-    async function refresh(){
+    function refresh(bundle){
       try{
         var brandDot = document.querySelector('.brand .dot');
-        var ov, subj, q, health, exam, feed, today, part, gradesData;
-        try { [ov, subj, q, health, exam, feed, today, part, gradesData] = await Promise.all([
-          j('/api/dashboard/overview'), j('/api/dashboard/subjects'),
-          j('/api/queue/stats').catch(function(){return null;}), j('/api/dashboard/api-health').catch(function(){return null;}),
-          j('/api/dashboard/exam-analytics').catch(function(){return null;}),
-          j('/api/dashboard/sync-feed').catch(function(){return null;}),
-          j('/api/dashboard/todays-activity').catch(function(){return null;}),
-          j('/api/dashboard/participation').catch(function(){return null;}),
-          j('/api/dashboard/completion-by-grade').catch(function(){return {grades:[]};})
-        ]); } catch(e){ brandDot.style.background='#d03b3b'; brandDot.style.boxShadow='0 0 10px #d03b3b'; return; }
+        // Data arrives from the shared /api/dashboard/live SSE stream (one set of
+        // queries serves every open screen), not per-screen polling.
+        var ov=bundle.overview, subj=bundle.subjects, q=bundle.queue, health=bundle.apiHealth,
+            exam=bundle.exam, feed=bundle.feed, today=bundle.today, part=bundle.participation,
+            gradesData=bundle.grades||{grades:[]};
+        if(!ov){ brandDot.style.background='#d03b3b'; brandDot.style.boxShadow='0 0 10px #d03b3b'; return; }
         brandDot.style.background='#0ca30c'; brandDot.style.boxShadow='0 0 10px #0ca30c';
 
         var total = ov.totalRegistered||0;
@@ -538,9 +534,9 @@
       }catch(e){ /* keep last good values */ }
     }
 
-    // FastTest health verdict pill (reads local logs — no FastTest load)
-    async function refreshHealth(){
-      try{ var h=await j('/api/fasttest/health');
+    // FastTest health verdict pill (from the shared live snapshot)
+    function refreshHealth(h){
+      try{ if(!h) return;
         var hp=document.getElementById('healthPill');
         var icon = h.verdict==='HEALTHY'?'🟢':(h.verdict==='DEGRADED'?'🟡':'🔴');
         var col  = h.verdict==='HEALTHY'?'#0ca30c':(h.verdict==='DEGRADED'?'#fab219':'#d03b3b');
@@ -549,9 +545,9 @@
       }catch(e){}
     }
 
-    // fetch control-state separately for the mode pill
-    async function refreshMode(){
-      try{ var s=await j('/api/queue/control-state');
+    // mode pill from the shared live snapshot's control-state
+    function refreshMode(s){
+      try{ if(!s) return;
         var mp=document.getElementById('modePill');
         if(s.globalPaused){ mp.textContent='Sync: PAUSED'; mp.className='pill off'; }
         else if(s.fastMode){ mp.textContent='Mode: ⚡ FAST'; mp.className='pill fast'; }
@@ -559,10 +555,22 @@
       }catch(e){}
     }
 
-    refresh(); refreshMode(); refreshHealth();
-    setInterval(refresh, 4000);
-    setInterval(refreshMode, 6000);
-    setInterval(refreshHealth, 6000);
+    // ---- Single live stream drives every tile (shared across all viewers) ----
+    // One SSE connection replaces ~11 polled endpoints; the server computes the
+    // snapshot once every 2s and pushes it to all screens.
+    (function connectLive(){
+      var es = new EventSource('/api/dashboard/live');
+      es.onmessage = function(ev){
+        var b; try { b = JSON.parse(ev.data); } catch(e){ return; }
+        refresh(b);
+        refreshMode(b.control);
+        refreshHealth(b.health);
+      };
+      es.onerror = function(){
+        // EventSource auto-reconnects; dim the brand dot while disconnected.
+        var d=document.querySelector('.brand .dot'); if(d){ d.style.background='#d0a03b'; d.style.boxShadow='0 0 10px #d0a03b'; }
+      };
+    })();
   </script>
 </body>
 </html>
