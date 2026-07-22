@@ -65,6 +65,16 @@
     .hrow .pc{text-align:right;font-weight:800;font-size:13px;font-variant-numeric:tabular-nums}
     /* completion-threshold filter buttons on the schools tile */
     .fbtns{display:flex;gap:6px;flex:0 0 auto;margin-bottom:8px;flex-wrap:wrap}
+    /* schools completion-rate slider */
+    .schslider{display:flex;align-items:center;gap:12px;flex:0 0 auto;margin-bottom:10px}
+    .schslider .ss-lbl{font-size:12px;color:var(--muted);white-space:nowrap}
+    .schslider .ss-lbl b{font-variant-numeric:tabular-nums;font-size:14px;color:#22c55e}
+    .schslider input[type=range]{flex:1;height:6px;-webkit-appearance:none;appearance:none;border-radius:6px;
+      background:linear-gradient(90deg,#ef4444,#f59e0b,#22c55e);outline:none;cursor:pointer}
+    .schslider input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:18px;height:18px;
+      border-radius:50%;background:#fff;border:2px solid #0a0f1a;box-shadow:0 1px 4px rgba(0,0,0,.5);cursor:pointer}
+    .schslider input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:#fff;
+      border:2px solid #0a0f1a;box-shadow:0 1px 4px rgba(0,0,0,.5);cursor:pointer}
     .fbtns button{cursor:pointer;font:inherit;font-size:11px;font-weight:700;padding:4px 11px;border-radius:999px;
       border:1px solid var(--line);background:var(--surface);color:var(--muted);transition:.15s}
     .fbtns button:hover{color:var(--ink);border-color:#ffffff33}
@@ -139,14 +149,12 @@
 
   <section class="board">
     <div class="tile schools">
-      <div class="cap">🏫 Schools Needing Attention — lowest completion
+      <div class="cap">🏫 Schools by Completion Rate
         <span class="scount" id="schCount"></span>
       </div>
-      <div class="fbtns" id="schFilters">
-        <button type="button" data-max="100" class="on">All</button>
-        <button type="button" data-max="80">&lt; 80%</button>
-        <button type="button" data-max="50">&lt; 50%</button>
-        <button type="button" data-max="30">&lt; 30%</button>
+      <div class="schslider">
+        <span class="ss-lbl">Show ≤ <b id="schVal">100</b>%</span>
+        <input type="range" id="schRange" min="0" max="100" step="5" value="100">
       </div>
       <div class="hlist" id="schools"></div>
     </div>
@@ -237,18 +245,22 @@
     // Schools tile: keep the full list client-side and filter by completion threshold.
     var allSchools = [], schMax = 100;
     function renderSchools(){
-      var rows = allSchools.filter(function(s){ return s.completionRate < schMax; });
+      var rows = allSchools.filter(function(s){ return s.completionRate <= schMax; });
       var cnt = document.getElementById('schCount');
       cnt.textContent = rows.length + (schMax<100 ? ' of '+allSchools.length : '') + ' schools';
-      if(!rows.length){ document.getElementById('schools').innerHTML='<div class="empty">No schools below '+schMax+'% completion. 🎉</div>'; return; }
+      if(!rows.length){ document.getElementById('schools').innerHTML='<div class="empty">No schools at or below '+schMax+'% completion. 🎉</div>'; return; }
       hbars('schools', rows.map(function(s){return {l:s.schoolName, v:s.completionRate};}), completionColor);
     }
-    document.getElementById('schFilters').addEventListener('click', function(e){
-      var b = e.target.closest('button'); if(!b) return;
-      schMax = Number(b.dataset.max);
-      [].forEach.call(this.children, function(c){ c.classList.toggle('on', c===b); });
-      renderSchools();
-    });
+    (function(){
+      var range=document.getElementById('schRange'), val=document.getElementById('schVal');
+      range.addEventListener('input', function(){
+        schMax = Number(range.value);
+        val.textContent = schMax;
+        // colour the readout by severity so the threshold reads at a glance
+        val.style.color = schMax>=80 ? '#22c55e' : schMax>=50 ? '#f59e0b' : '#ef4444';
+        renderSchools();
+      });
+    })();
 
     // ---- Exam Status Funnel: multi-select subject filter ----
     // Subject names are long ("parent questions En"), so chips show a short label
