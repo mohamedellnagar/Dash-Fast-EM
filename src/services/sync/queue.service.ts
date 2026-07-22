@@ -10,6 +10,25 @@ import { decideRetry } from './retry';
 
 const ACTIVE_STATUSES = [JOB_STATUS.QUEUED, JOB_STATUS.RUNNING, JOB_STATUS.RETRY_SCHEDULED];
 
+// The claim path runs on every job for every runner (~20 concurrent). Several
+// of its checks — "is sync allowed?" and "which subjects/workspaces are paused?"
+// — change rarely but were re-queried on every claim, flooding the DB and
+// starving the runner pool (slots sat empty while claims waited on DB). Cache
+// these read-mostly control reads for a short TTL so claims stay cheap; an
+// operator toggle takes effect within the TTL.
+const CONTROL_TTL_MS = 2000;
+function ttlCache<T>(fn: () => Promise<T>, ttlMs: number) {
+  let value: T | undefined;
+  let at = 0;
+  let inflight: Promise<T> | null = null;
+  return async (now: () => number = () => Date.now()): Promise<T> => {
+    if (value !== undefined && now() - at < ttlMs) return value;
+    if (inflight) return inflight;
+    inflight = fn().then((v) => { value = v; at = now(); inflight = null; return v; }).catch((e) => { inflight = null; throw e; });
+    return inflight;
+  };
+}
+
 export interface EnqueueInput {
   jobType: string;
   priority?: number;
@@ -70,12 +89,13 @@ const endpointForJobType: Record<string, Endpoint> = {
   MANUAL_SYNC: 'status',
 };
 
-async function pausedSets() {
+async function pausedSetsUncached() {
   const controls = await prisma.queueControl.findMany({ where: { paused: true } });
   const workspaces = new Set(controls.filter((c) => c.scope === 'WORKSPACE').map((c) => c.scopeKey));
   const jobTypes = new Set(controls.filter((c) => c.scope === 'JOB_TYPE').map((c) => c.scopeKey));
   return { workspaces, jobTypes };
 }
+const pausedSets = ttlCache(pausedSetsUncached, CONTROL_TTL_MS);
 
 /**
  * Atomically claim the next runnable job for a worker. Respects: paused
@@ -427,22 +447,25 @@ export async function setSyncWindow(startHour: number | null, endHour: number | 
 }
 
 /** Whether sync is allowed to run right now (master freeze + global switch + window). */
-export async function syncAllowedNow(now: () => number = () => Date.now()): Promise<boolean> {
-  if (await isFastTestFrozen()) return false; // master FastTest kill-switch
-  const global = await prisma.queueControl.findFirst({ where: { scope: 'GLOBAL', paused: true } });
-  if (global) return false;
-
-  const rows = await prisma.systemSetting.findMany({ where: { key: { in: [WINDOW_START_KEY, WINDOW_END_KEY] } } });
+// DB-derived part of the allowed check (frozen switch, global pause, window
+// bounds). Cached with a short TTL because it's read on every job claim; the
+// hour comparison below is recomputed fresh each call (cheap, no DB).
+const allowedState = ttlCache(async () => {
+  const [frozen, global, rows] = await Promise.all([
+    isFastTestFrozen(),
+    prisma.queueControl.findFirst({ where: { scope: 'GLOBAL', paused: true } }),
+    prisma.systemSetting.findMany({ where: { key: { in: [WINDOW_START_KEY, WINDOW_END_KEY] } } }),
+  ]);
   const map = new Map(rows.map((r) => [r.key, r.value]));
-  const s = map.get(WINDOW_START_KEY);
-  const e = map.get(WINDOW_END_KEY);
-  if (!s || !e) return true; // no window configured → always allowed
-  const start = Number(s);
-  const end = Number(e);
-  if (Number.isNaN(start) || Number.isNaN(end)) return true;
+  return { frozen, globalPaused: !!global, start: Number(map.get(WINDOW_START_KEY)), end: Number(map.get(WINDOW_END_KEY)) };
+}, CONTROL_TTL_MS);
 
+export async function syncAllowedNow(now: () => number = () => Date.now()): Promise<boolean> {
+  const st = await allowedState(now);
+  if (st.frozen || st.globalPaused) return false;
+  if (Number.isNaN(st.start) || Number.isNaN(st.end)) return true; // no window → always allowed
   const hour = hourInTimezone(now(), env.timezone);
-  return start <= end ? hour >= start && hour < end : hour >= start || hour < end;
+  return st.start <= st.end ? hour >= st.start && hour < st.end : hour >= st.start || hour < st.end;
 }
 
 /** Current hour (0-23) in a given IANA timezone, independent of the server clock. */
