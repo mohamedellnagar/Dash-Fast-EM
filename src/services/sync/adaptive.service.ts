@@ -54,14 +54,23 @@ export async function rollingStats(workspaceId: string, now: () => number = () =
 }
 
 // Per-workspace adaptive memory (in-process; converges from DB stats each call).
-const state = new Map<string, { throttle: number; lastDegradeAt: number }>();
+const state = new Map<string, { throttle: number; lastDegradeAt: number; lastEvalAt?: number }>();
 
 /** Return the current throttle multiplier for a workspace, updating from stats. */
+// rollingStats scans up to 5000 ApiRequestLog rows and computes percentiles —
+// far too heavy to run on every job (it was the dominant per-job cost, ~seconds).
+// Recompute the throttle at most once every few seconds per workspace and serve
+// the cached value to every job in between; the adaptive signal doesn't need
+// per-request freshness.
+const THROTTLE_TTL_MS = 4000;
+
 export async function currentThrottle(workspaceId: string, now: () => number = () => Date.now()): Promise<number> {
   if (!env.adaptive.enabled) return 1;
-  const s = state.get(workspaceId) ?? { throttle: 1, lastDegradeAt: 0 };
-  const stats = await rollingStats(workspaceId, now);
+  const s = state.get(workspaceId) ?? { throttle: 1, lastDegradeAt: 0, lastEvalAt: 0 };
+  // Serve the cached throttle unless it's stale.
+  if (now() - (s.lastEvalAt ?? 0) < THROTTLE_TTL_MS) return s.throttle;
 
+  const stats = await rollingStats(workspaceId, now);
   const stressed =
     (stats.count >= 3) &&
     (stats.p95 >= env.adaptive.latencyDegradeMs || stats.errorRate >= env.adaptive.errorRateDegrade || stats.http429 > 0);
@@ -72,6 +81,7 @@ export async function currentThrottle(workspaceId: string, now: () => number = (
   } else if (now() - s.lastDegradeAt > env.adaptive.recoverAfterMs) {
     s.throttle = Math.min(1, s.throttle + 0.1); // gradual recovery
   }
+  s.lastEvalAt = now();
   state.set(workspaceId, s);
   return s.throttle;
 }
