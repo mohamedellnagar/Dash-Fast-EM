@@ -115,6 +115,11 @@ export async function claimNext(workerId: string, now: () => number = () => Date
 
   const { workspaces: pausedWs, jobTypes: pausedJt } = await pausedSets();
 
+  // Fetch a wider window of due jobs than one worker needs. With ~20 workers all
+  // claiming at once, a narrow window makes them all fight over the same top
+  // rows — the guarded update serializes and InnoDB deadlocks. A wider pool +
+  // per-worker random ordering spreads the contention so each worker targets a
+  // different row first.
   const candidates = await prisma.syncJob.findMany({
     where: {
       OR: [
@@ -123,9 +128,14 @@ export async function claimNext(workerId: string, now: () => number = () => Date
       ],
     },
     orderBy: [{ priority: 'asc' }, { scheduledAt: 'asc' }],
-    take: 50,
+    take: 200,
   });
   if (candidates.length === 0) return null;
+  // Shuffle so concurrent workers don't all attempt the same head-of-queue row.
+  for (let i = candidates.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [candidates[i], candidates[j]] = [candidates[j], candidates[i]];
+  }
 
   // Per-workspace RUNNING counts for fairness + concurrency enforcement.
   const runningByWs = new Map<string, number>();
