@@ -544,6 +544,8 @@ model ApiRequestLog {
   @@index([workspaceId])
   @@index([requestedAt])
   @@index([success])
+  @@index([workspaceId, requestedAt]) // per-workspace last-hour health aggregations
+  @@index([success, requestedAt]) // last-hour failure counts
 }
 
 model AuditLog {

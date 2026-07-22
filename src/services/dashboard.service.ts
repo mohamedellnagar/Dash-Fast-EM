@@ -94,7 +94,11 @@ export async function statusDistribution(where: Prisma.ExamRegistrationWhereInpu
 
 /** Participation coverage: how many of the targeted schools/students actually
  * participated (started the exam). "Participating" = has a started status. */
-export async function participationCoverage(programType?: string, subjects?: string[]) {
+export function participationCoverage(programType?: string, subjects?: string[]) {
+  return memo(`participation:${programType ?? ''}:${(subjects ?? []).join(',')}`, DASH_TTL,
+    () => participationCoverageUncached(programType, subjects));
+}
+async function participationCoverageUncached(programType?: string, subjects?: string[]) {
   const prog = programType ? Prisma.sql`AND r.programType = ${programType}` : Prisma.empty;
   const subj = subjects && subjects.length ? Prisma.sql`AND r.examSubject IN (${Prisma.join(subjects)})` : Prisma.empty;
   const rows = await prisma.$queryRaw<Array<{ ts: bigint; ps: bigint; tst: bigint; pst: bigint }>>`
@@ -158,10 +162,16 @@ export function overview(where: Prisma.ExamRegistrationWhereInput) {
   return memo('overview:' + JSON.stringify(where), DASH_TTL, () => overviewUncached(where));
 }
 async function overviewUncached(where: Prisma.ExamRegistrationWhereInput) {
+  // Bound the API-log stats to the last hour: ApiRequestLog grows by hundreds of
+  // thousands of rows during heavy syncing, so unbounded count/aggregate over it
+  // full-scans an ever-growing table (the reason /ops got slower over time). A
+  // requestedAt window uses the index and stays fast — and "last hour" is the
+  // more meaningful success-rate/latency figure anyway.
+  const since = new Date(Date.now() - 60 * 60 * 1000);
   const [kpis, apiErrors, apiAgg, lastSync, studentCount] = await Promise.all([
     kpiBlock(where),
-    prisma.apiRequestLog.count({ where: { success: false } }),
-    prisma.apiRequestLog.aggregate({ _avg: { responseTimeMs: true }, _count: { _all: true } }),
+    prisma.apiRequestLog.count({ where: { success: false, requestedAt: { gte: since } } }),
+    prisma.apiRequestLog.aggregate({ where: { requestedAt: { gte: since } }, _avg: { responseTimeMs: true }, _count: { _all: true } }),
     prisma.fastTestWorkspace.findFirst({ where: { lastSuccessfulSyncAt: { not: null } }, orderBy: { lastSuccessfulSyncAt: 'desc' }, select: { lastSuccessfulSyncAt: true } }),
     countDistinctStudents(where),
   ]);
@@ -333,7 +343,11 @@ export async function correctIncorrectSkipped(where: Prisma.ExamRegistrationWher
  * with a rapid-completion (integrity) flag, activity by hour, and daily
  * completion velocity. Scoped by program (SPA/ABA) since the walls are per-program.
  */
-export async function examOperationalAnalytics(programType?: string, subjects?: string[]) {
+export function examOperationalAnalytics(programType?: string, subjects?: string[]) {
+  return memo(`examops:${programType ?? ''}:${(subjects ?? []).join(',')}`, DASH_TTL,
+    () => examOperationalAnalyticsUncached(programType, subjects));
+}
+async function examOperationalAnalyticsUncached(programType?: string, subjects?: string[]) {
   const prog = programType ? Prisma.sql`AND r.programType = ${programType}` : Prisma.empty;
   const subj = subjects && subjects.length ? Prisma.sql`AND r.examSubject IN (${Prisma.join(subjects)})` : Prisma.empty;
 
@@ -420,19 +434,26 @@ export async function completionTrends(where: Prisma.ExamRegistrationWhereInput)
 
 const STALE_MS = 15 * 60 * 1000;
 
-export async function apiHealth() {
+export function apiHealth() {
+  return memo('apiHealth', DASH_TTL, apiHealthUncached);
+}
+async function apiHealthUncached() {
+  // All API-log stats are bounded to the last hour so they use the requestedAt
+  // index instead of full-scanning an ApiRequestLog table that grows by hundreds
+  // of thousands of rows during syncing.
+  const since = new Date(Date.now() - 60 * 60 * 1000);
   const [workspaces, recent, errDist] = await Promise.all([
     prisma.fastTestWorkspace.findMany({ where: { deletedAt: null }, orderBy: { subjectCode: 'asc' } }),
     prisma.apiRequestLog.findMany({ orderBy: { requestedAt: 'desc' }, take: 50, select: { requestedAt: true, responseTimeMs: true, success: true, workspaceId: true } }),
-    prisma.apiRequestLog.groupBy({ by: ['fastTestErrorCode'], where: { success: false }, _count: { _all: true } }),
+    prisma.apiRequestLog.groupBy({ by: ['fastTestErrorCode'], where: { success: false, requestedAt: { gte: since } }, _count: { _all: true } }),
   ]);
 
   const now = Date.now();
   const perWorkspace = await Promise.all(
     workspaces.map(async (w) => {
       const [agg, fails, staleCount] = await Promise.all([
-        prisma.apiRequestLog.aggregate({ where: { workspaceId: w.id }, _avg: { responseTimeMs: true }, _count: { _all: true } }),
-        prisma.apiRequestLog.count({ where: { workspaceId: w.id, success: false } }),
+        prisma.apiRequestLog.aggregate({ where: { workspaceId: w.id, requestedAt: { gte: since } }, _avg: { responseTimeMs: true }, _count: { _all: true } }),
+        prisma.apiRequestLog.count({ where: { workspaceId: w.id, success: false, requestedAt: { gte: since } } }),
         prisma.examRegistration.count({ where: { workspaceId: w.id, deletedAt: null, OR: [{ lastSyncAt: null }, { lastSyncAt: { lt: new Date(now - STALE_MS) } }] } }),
       ]);
       const total = agg._count._all || 0;
