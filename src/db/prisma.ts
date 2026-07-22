@@ -8,7 +8,10 @@ import { env } from '../config/env';
 // Size it from the configured concurrency unless the URL already sets a limit.
 function withConnectionLimit(url: string): string {
   if (!url.startsWith('mysql') || /[?&]connection_limit=/.test(url)) return url;
-  const limit = Math.max(20, env.sync.concurrency * 2 + 10);
+  // Enough for the async runners (each holds one connection at a time) plus
+  // heartbeats/scheduler, but conservative so web + worker(s) stay well under
+  // MySQL's default max_connections (151): concurrency + a small headroom.
+  const limit = Math.max(15, env.sync.concurrency + 8);
   return url + (url.includes('?') ? '&' : '?') + `connection_limit=${limit}&pool_timeout=20`;
 }
 
