@@ -39,19 +39,27 @@ export async function autoTuneRateLimits(now: () => number = () => Date.now()): 
       } else {
         next = Math.min(CEIL_RPM, row.maxRpm + INCREASE);
       }
-      if (next === row.maxRpm) continue;
 
-      // Keep concurrency roughly proportional so rpm stays the binding limit.
-      const nextConc = Math.max(3, Math.min(32, Math.ceil(next / 60)));
+      // Derive the companion limits so rpm is always the binding constraint —
+      // otherwise a stale minDelayMs (e.g. 200ms → 5/s) silently caps throughput
+      // far below the tuned rpm.
+      const nextConc = Math.max(3, Math.min(48, Math.ceil(next / 60)));
       const nextRps = Math.max(1, Math.ceil(next / 30));
+      const nextDelay = Math.max(5, Math.floor(60000 / next)); // ms between requests
+
+      // Skip only when NOTHING changes — including when rpm is pinned at the
+      // ceiling but the derived limits are still stale (the bug that pinned a
+      // 3000-rpm workspace at 200ms min-delay).
+      if (next === row.maxRpm && nextConc === row.maxConcurrent && nextRps === row.maxRps && nextDelay === row.minDelayMs) continue;
+
       await prisma.workspaceRateLimit.update({
         where: { workspaceId: row.workspaceId },
-        data: { maxRpm: next, maxConcurrent: nextConc, maxRps: nextRps },
+        data: { maxRpm: next, maxConcurrent: nextConc, maxRps: nextRps, minDelayMs: nextDelay },
       });
       invalidateRateConfig(row.workspaceId);
       logger.info(
-        { workspaceId: row.workspaceId, from: row.maxRpm, to: next, stressed, p95: s.p95, errorRate: s.errorRate, http429: s.http429 },
-        'autotune adjusted workspace maxRpm',
+        { workspaceId: row.workspaceId, from: row.maxRpm, to: next, minDelayMs: nextDelay, stressed, p95: s.p95, errorRate: s.errorRate, http429: s.http429 },
+        'autotune adjusted workspace limits',
       );
     } catch (e) {
       logger.warn({ workspaceId: row.workspaceId, err: (e as Error).message }, 'autotune failed for workspace');

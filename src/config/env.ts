@@ -70,10 +70,10 @@ export const env = {
 
   sync: {
     enabled: bool('SYNC_ENABLED', true),
-    concurrency: int('SYNC_WORKER_CONCURRENCY', 4),
+    concurrency: int('SYNC_WORKER_CONCURRENCY', 20),
     tickIntervalMs: int('SYNC_TICK_INTERVAL_MS', 15000),
     maxBatch: int('SYNC_MAX_BATCH', 50),
-    rateLimitPerMinute: int('FASTTEST_RATE_LIMIT_PER_MINUTE', 120),
+    rateLimitPerMinute: int('FASTTEST_RATE_LIMIT_PER_MINUTE', 300),
     maxRetries: int('SYNC_MAX_RETRIES', 3),
     schedulerEnabled: bool('SCHEDULER_ENABLED', true),
     schedulerIntervalMs: int('SCHEDULER_INTERVAL_MS', 30000),
@@ -81,20 +81,21 @@ export const env = {
     stalledJobMs: int('SYNC_STALLED_JOB_MS', 120000),
     heartbeatMs: int('WORKER_HEARTBEAT_MS', 10000),
     workerStaleMs: int('WORKER_STALE_MS', 30000),
-    globalMaxConcurrent: int('SYNC_GLOBAL_MAX_CONCURRENT', 16),
+    globalMaxConcurrent: int('SYNC_GLOBAL_MAX_CONCURRENT', 60),
     // Run the sync worker loops inside the web process instead of a separate
     // process. Convenient for single-box / local runs (one `npm run dev` does
     // everything). In production with a dedicated worker service, keep this off.
     workerInWeb: bool('WORKER_IN_WEB', false),
   },
 
-  // Conservative per-workspace defaults — FastTest limits are NOT assumed.
+  // Per-workspace defaults. Moderate out of the box (auto-tune discovers the
+  // real ceiling from live FastTest health); overridable per-workspace in the UI.
   rate: {
-    maxRps: num('RATE_MAX_RPS', 2),
-    maxRpm: int('RATE_MAX_RPM', 60),
-    maxConcurrent: int('RATE_MAX_CONCURRENT', 3),
-    minDelayMs: int('RATE_MIN_DELAY_MS', 200),
-    burst: int('RATE_BURST', 5),
+    maxRps: num('RATE_MAX_RPS', 8),
+    maxRpm: int('RATE_MAX_RPM', 300),
+    maxConcurrent: int('RATE_MAX_CONCURRENT', 10),
+    minDelayMs: int('RATE_MIN_DELAY_MS', 50),
+    burst: int('RATE_BURST', 15),
     cooldownMs: int('RATE_COOLDOWN_MS', 30000),
   },
 

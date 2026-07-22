@@ -274,8 +274,8 @@ export async function pauseJobType(jobType: string, paused: boolean, by?: string
 // FAST replaces the NORMAL rate limits, disabling it restores them.
 
 const RATE_PROFILES = {
-  NORMAL: { maxRps: 2, maxRpm: 60, maxConcurrent: 3, maxBatch: 25, minDelayMs: 200, burst: 5, cooldownMs: 30000 },
-  FAST: { maxRps: 20, maxRpm: 1200, maxConcurrent: 10, maxBatch: 100, minDelayMs: 10, burst: 20, cooldownMs: 15000 },
+  NORMAL: { maxRps: 8, maxRpm: 300, maxConcurrent: 10, maxBatch: 50, minDelayMs: 50, burst: 15, cooldownMs: 30000 },
+  FAST: { maxRps: 40, maxRpm: 2400, maxConcurrent: 40, maxBatch: 100, minDelayMs: 10, burst: 40, cooldownMs: 15000 },
 };
 const FAST_MODE_KEY = 'sync.fastMode';
 
