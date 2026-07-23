@@ -1,6 +1,6 @@
 {
   "name": "fasttest-live-dashboard",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "FastTest Live Monitoring & Analytics Dashboard",
   "type": "commonjs",
@@ -19,8 +19,8 @@
     "db:reset": "prisma migrate reset --force",
     "db:seed": "ts-node --transpile-only prisma/seed.ts",
     "pretest": "bash scripts/prepare-test-db.sh",
-    "test": "DATABASE_URL=\"file:./test.db\" vitest run",
-    "test:watch": "DATABASE_URL=\"file:./test.db\" vitest",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "test:live": "RUN_LIVE_FASTTEST=1 vitest run tests/live",
     "lint": "eslint . --ext .ts",
     "typecheck": "tsc --noEmit -p tsconfig.json"

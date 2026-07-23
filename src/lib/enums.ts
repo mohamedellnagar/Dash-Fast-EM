@@ -41,6 +41,14 @@ export const PERMISSION = {
   WORKSPACE_PAUSE: 'workspace:pause',
   ALERT_VIEW: 'alert:view',
   ALERT_MANAGE: 'alert:manage',
+  // Manual Verification — read-only lookup/diagnostics for a single TestCode.
+  // Split so that seeing that a check ran is separable from seeing the
+  // student's access token, the raw API payloads, or exporting a report.
+  MANUAL_VERIFICATION_VIEW: 'manual_verification.view',
+  MANUAL_VERIFICATION_EXECUTE: 'manual_verification.execute',
+  MANUAL_VERIFICATION_VIEW_SENSITIVE: 'manual_verification.view_sensitive',
+  MANUAL_VERIFICATION_VIEW_RAW: 'manual_verification.view_raw_response',
+  MANUAL_VERIFICATION_EXPORT: 'manual_verification.export',
 } as const;
 export type PermissionKey = (typeof PERMISSION)[keyof typeof PERMISSION];
 

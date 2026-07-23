@@ -6,7 +6,7 @@
 <div class="panel">
   <h2>FastTest Workspaces</h2>
   <table>
-    <thead><tr><th>Workspace</th><th>Subject</th><th>Base URL</th><th>API Key</th><th>Active</th><th>Sync</th><th>Rate (auto-managed)</th><th>Last Auth</th><th></th></tr></thead>
+    <thead><tr><th>Workspace</th><th>Subject</th><th>Base URL</th><th>API Key</th><th>Active</th><th>Sync</th><th>Exam-time source</th><th>Rate (auto-managed)</th><th>Last Auth</th><th></th></tr></thead>
     <tbody>
       <% workspaces.forEach(function(w){ %>
         <tr>
@@ -16,6 +16,20 @@
           <td class="mono"><%= w.hasApiKey ? w.restApiKeyMasked : '(none)' %></td>
           <td><%= w.isActive ? 'Yes' : 'No' %></td>
           <td><%= w.syncEnabled ? 'On' : 'Off' %></td>
+          <%# FastTest records exam timestamps on a per-workspace clock and has
+              changed it under us before, so it is set here rather than in code. %>
+          <td>
+            <form method="post" action="/admin/integration/workspaces/<%= w.id %>/timezone" style="display:flex;gap:5px;align-items:center">
+              <select name="sourceTimeZone" style="font-size:11px;padding:2px 4px">
+                <option value="" <%= w.sourceTimeZone ? '' : 'selected' %>>(default)</option>
+                <% timeZoneChoices.forEach(function(tz){ %>
+                  <option value="<%= tz %>" <%= w.sourceTimeZone === tz ? 'selected' : '' %>><%= tz %></option>
+                <% }); %>
+              </select>
+              <button class="btn secondary sm" type="submit">Save</button>
+            </form>
+            <div class="muted" style="font-size:10px;margin-top:2px"><%= w.sourceOffsetLabel %></div>
+          </td>
           <td>
             <% if (w.rateLimit.autoTune) { %>
               <span style="color:#22c55e;font-weight:700">⚙️ Auto</span>

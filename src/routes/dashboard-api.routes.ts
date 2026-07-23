@@ -1,6 +1,6 @@
 import { Router, Request } from 'express';
 import { PERMISSION } from '../lib/enums';
-import { requirePermission, schoolScopeFor } from '../middleware/auth';
+import { requirePermission, requireGlobalScope, schoolScopeFor } from '../middleware/auth';
 import { asyncHandler } from '../middleware/async-handler';
 import { parseFilter, buildRegistrationWhere } from '../services/filters';
 import * as dash from '../services/dashboard.service';
@@ -12,7 +12,7 @@ export const dashboardApiRouter = Router();
 // Overview bundle every 2s and fans it out to all viewers, so N open screens
 // cost one set of queries instead of N. Scoped users still use the per-request
 // JSON endpoints; this stream is the unfiltered operations wall.
-dashboardApiRouter.get('/live', requirePermission(PERMISSION.DASHBOARD_VIEW), (req, res) => {
+dashboardApiRouter.get('/live', requirePermission(PERMISSION.DASHBOARD_VIEW), requireGlobalScope, (req, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache, no-transform');
   res.setHeader('Connection', 'keep-alive');

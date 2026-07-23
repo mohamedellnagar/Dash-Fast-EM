@@ -221,9 +221,15 @@ const yearPauseSchema = z.object({ academicYear: z.string().min(1).max(20), paus
 syncAdminRouter.post('/api/queue/academic-years/pause', requireAuth, requirePermission(PERMISSION.QUEUE_MANAGE), async (req, res) => {
   const p = yearPauseSchema.safeParse(req.body);
   if (!p.success) return res.status(400).json({ error: 'academicYear and paused required' });
-  await pauseAcademicYear(p.data.academicYear, p.data.paused, req.principal!.email);
-  await audit({ ...actor(req), action: p.data.paused ? 'YEAR_SYNC_PAUSE' : 'YEAR_SYNC_RESUME', detail: p.data.academicYear });
-  res.json({ ok: true, years: await getAcademicYearSyncControls() });
+  const effect = await pauseAcademicYear(p.data.academicYear, p.data.paused, req.principal!.email);
+  await audit({
+    ...actor(req),
+    action: p.data.paused ? 'YEAR_SYNC_PAUSE' : 'YEAR_SYNC_RESUME',
+    detail: p.data.paused
+      ? `${p.data.academicYear} — cancelled ${effect.cancelled} queued job(s), ${effect.stillRunning} still finishing`
+      : p.data.academicYear,
+  });
+  res.json({ ok: true, ...effect, years: await getAcademicYearSyncControls() });
 });
 
 // ---- Worker health ----

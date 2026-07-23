@@ -1,6 +1,7 @@
 import { prisma } from '../db/prisma';
 import { decryptOrNull, maskSecret } from '../lib/crypto';
 import { env } from '../config/env';
+import { offsetHoursBetween, zoneObservesDst } from '../lib/exam-time';
 
 /** Normalize a subject alias for matching (uppercase, collapse whitespace). */
 export function normalizeAlias(alias: string | null | undefined): string {
@@ -17,6 +18,8 @@ export interface ResolvedWorkspace {
   username: string | null;
   password: string | null;
   tokenTTL: number;
+  /** IANA zone this workspace's exam timestamps are recorded in (null = env default). */
+  sourceTimeZone: string | null;
 }
 
 /**
@@ -74,6 +77,7 @@ function decryptWorkspace(ws: {
   usernameEncrypted: string | null;
   passwordEncrypted: string | null;
   tokenTTL: number;
+  sourceTimeZone: string | null;
 }): ResolvedWorkspace {
   return {
     workspaceId: ws.id,
@@ -84,6 +88,7 @@ function decryptWorkspace(ws: {
     username: decryptOrNull(ws.usernameEncrypted),
     password: decryptOrNull(ws.passwordEncrypted),
     tokenTTL: ws.tokenTTL,
+    sourceTimeZone: ws.sourceTimeZone ?? null,
   };
 }
 
@@ -105,6 +110,8 @@ export async function listWorkspacesMasked() {
     isActive: w.isActive,
     syncEnabled: w.syncEnabled,
     tokenTTL: w.tokenTTL,
+    sourceTimeZone: w.sourceTimeZone ?? null,
+    sourceOffsetLabel: describeOffset(w.sourceTimeZone ?? env.fasttest.sourceTimezone, env.displayTimezone),
     restApiKeyMasked: maskSecret(decryptOrNull(w.restApiKeyEncrypted) ?? ''),
     hasApiKey: !!w.restApiKeyEncrypted,
     lastAuthenticationAt: w.lastAuthenticationAt,
@@ -119,4 +126,14 @@ export async function listWorkspacesMasked() {
       autoTune: w.rateLimit?.autoTune ?? false,
     },
   }));
+}
+
+/** "+4h year-round" / "+9h summer / +10h winter", for the admin UI. */
+function describeOffset(sourceTz: string, displayTz: string): string {
+  const summer = offsetHoursBetween(sourceTz, displayTz, new Date(Date.UTC(2025, 6, 15)));
+  const winter = offsetHoursBetween(sourceTz, displayTz, new Date(Date.UTC(2025, 11, 15)));
+  const sign = (n: number) => (n >= 0 ? `+${n}` : `${n}`);
+  return zoneObservesDst(sourceTz)
+    ? `${sign(summer)}h summer / ${sign(winter)}h winter -> ${displayTz}`
+    : `${sign(summer)}h year-round -> ${displayTz}`;
 }

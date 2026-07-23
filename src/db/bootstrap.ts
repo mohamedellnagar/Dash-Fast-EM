@@ -14,6 +14,28 @@ const ROLE_NAMES: Record<string, string> = {
 };
 
 /**
+ * Give every role that already holds `anchor` the permissions in `add`, without
+ * removing anything. Used to roll a new permission out to existing, admin-edited
+ * roles that the first-run seed no longer touches.
+ */
+async function grantIfMissing(anchor: string, add: string[]): Promise<void> {
+  const anchorPerm = await prisma.permission.findUnique({ where: { key: anchor } });
+  if (!anchorPerm) return;
+  const holders = await prisma.rolePermission.findMany({
+    where: { permissionId: anchorPerm.id },
+    select: { roleId: true },
+  });
+  for (const key of add) {
+    const perm = await prisma.permission.findUnique({ where: { key } });
+    if (!perm) continue;
+    for (const { roleId } of holders) {
+      const has = await prisma.rolePermission.findFirst({ where: { roleId, permissionId: perm.id } });
+      if (!has) await prisma.rolePermission.create({ data: { roleId, permissionId: perm.id } });
+    }
+  }
+}
+
+/**
  * Idempotent first-boot bootstrap: ensures the permission catalog, the RBAC
  * roles + their grants, and the bootstrap administrator all exist. Safe to run
  * on every startup — it upserts and never destroys user data. This lets a fresh
@@ -47,6 +69,19 @@ export async function ensureBootstrap(): Promise<void> {
         }
       }
     }
+
+    // 2b. Additive backfill for Manual Verification.
+    //
+    // Roles that already have grants are admin-managed and left alone by the
+    // block above, so a brand-new permission would never reach them and the
+    // upgraded page would 403 for existing Operations users. Manual Verification
+    // replaced a page previously gated on sync:manual, so every role already
+    // holding sync:manual keeps equivalent access — view + execute only. The
+    // sensitive/raw/export grants stay opt-in through the Roles UI.
+    await grantIfMissing(PERMISSION.MANUAL_SYNC, [
+      PERMISSION.MANUAL_VERIFICATION_VIEW,
+      PERMISSION.MANUAL_VERIFICATION_EXECUTE,
+    ]);
 
     // 3. Bootstrap admin
     const email = env.bootstrapAdminEmail.toLowerCase();

@@ -8,6 +8,8 @@ import { getWorkspaceById, listWorkspacesMasked, normalizeAlias } from '../servi
 import { FastTestClient } from '../services/fasttest/client';
 import { assertConnectionTestEnabled } from '../services/fasttest/freeze';
 import { audit } from '../services/audit.service';
+import { isValidTimeZone, SOURCE_TIMEZONE_CHOICES } from '../lib/exam-time';
+import { env } from '../config/env';
 import { getFastTestHealth, getFastTestStatusLight } from '../services/observability/fasttest-health.service';
 
 export const adminRouter = Router();
@@ -61,7 +63,11 @@ adminRouter.get('/api/fasttest/status/stream', requireAuth, (req, res) => {
 adminRouter.get('/admin/integration', requireAuth, requirePermission(PERMISSION.INTEGRATION_MANAGE), async (req, res) => {
   const workspaces = await listWorkspacesMasked();
   const mappings = await prisma.workspaceSubjectMapping.findMany({ include: { workspace: true }, orderBy: { subjectAlias: 'asc' } });
-  res.render('integration', { title: 'Integration Settings', principal: req.principal, workspaces, mappings, nav: 'integration', flash: req.query.msg ?? null });
+  res.render('integration', {
+    title: 'Integration Settings', principal: req.principal, workspaces, mappings,
+    nav: 'integration', flash: req.query.msg ?? null,
+    timeZoneChoices: SOURCE_TIMEZONE_CHOICES,
+  });
 });
 
 const workspaceSchema = z.object({
@@ -69,6 +75,11 @@ const workspaceSchema = z.object({
   subjectCode: z.string().min(1).max(60),
   baseUrl: z.string().url().max(300),
   tokenTTL: z.coerce.number().int().min(60).max(86400).default(3600),
+  // IANA zone this workspace records exam times in. FastTest sets it per
+  // workspace and it differs across ours, so it is configurable here rather
+  // than hard-coded. Validated against the runtime's own zone database.
+  sourceTimeZone: z.string().max(64).optional()
+    .refine((v) => !v || isValidTimeZone(v), { message: 'Unknown IANA timezone' }),
   restApiKey: z.string().max(500).optional(),
   username: z.string().max(200).optional(),
   password: z.string().max(200).optional(),
@@ -86,6 +97,7 @@ adminRouter.post('/admin/integration/workspaces', requireAuth, requirePermission
       subjectCode: normalizeAlias(d.subjectCode),
       baseUrl: d.baseUrl,
       tokenTTL: d.tokenTTL,
+      sourceTimeZone: d.sourceTimeZone || null,
       restApiKeyEncrypted: encryptOrNull(d.restApiKey),
       usernameEncrypted: encryptOrNull(d.username),
       passwordEncrypted: encryptOrNull(d.password),
@@ -114,6 +126,30 @@ adminRouter.post('/admin/integration/workspaces/:id/test', requireAuth, requireP
   } catch (e: any) {
     res.status(502).json({ ok: false, error: e.errorType ?? 'AUTH_FAILED', message: e.message });
   }
+});
+
+/**
+ * Update just the source timezone of a workspace.
+ *
+ * FastTest sets this per workspace on their side and has changed it under us
+ * before, so an operator must be able to correct it without a deployment. The
+ * stored timestamps are NOT rewritten here — run scripts/backfill-exam-times.ts
+ * afterwards, which recomputes them from the preserved vendor strings.
+ */
+adminRouter.post('/admin/integration/workspaces/:id/timezone', requireAuth, requirePermission(PERMISSION.INTEGRATION_MANAGE), async (req, res) => {
+  const tz = String(req.body?.sourceTimeZone ?? '').trim();
+  if (tz && !isValidTimeZone(tz)) return res.redirect('/admin/integration?msg=Unknown+timezone');
+  const ws = await prisma.fastTestWorkspace.findFirst({ where: { id: req.params.id, deletedAt: null } });
+  if (!ws) return res.redirect('/admin/integration?msg=Workspace+not+found');
+
+  await prisma.fastTestWorkspace.update({ where: { id: ws.id }, data: { sourceTimeZone: tz || null } });
+  await audit({
+    userId: req.principal!.userId, actorEmail: req.principal!.email, action: 'CONFIG_CHANGE',
+    entityType: 'FastTestWorkspace', entityId: ws.id,
+    detail: `source timezone ${ws.sourceTimeZone ?? '(default)'} -> ${tz || '(default)'} for ${ws.workspaceName}`,
+    ipAddress: req.ip,
+  });
+  res.redirect('/admin/integration?msg=Timezone+updated+-+re-run+the+exam-time+backfill+to+apply+it+to+stored+rows');
 });
 
 // Subject alias mapping

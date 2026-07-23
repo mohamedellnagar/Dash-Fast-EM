@@ -26,6 +26,12 @@ export const ROLE_PERMISSIONS: Record<RoleKey, PermissionKey[]> = {
     PERMISSION.WORKSPACE_PAUSE,
     PERMISSION.ALERT_VIEW,
     PERMISSION.ALERT_MANAGE,
+    // Operations troubleshoot codes daily: they may run checks and read raw
+    // payloads, but not unmask a student's access/proctor codes.
+    PERMISSION.MANUAL_VERIFICATION_VIEW,
+    PERMISSION.MANUAL_VERIFICATION_EXECUTE,
+    PERMISSION.MANUAL_VERIFICATION_VIEW_RAW,
+    PERMISSION.MANUAL_VERIFICATION_EXPORT,
   ],
   [ROLE.ASSESSMENT_TEAM]: [
     PERMISSION.DASHBOARD_VIEW,
@@ -39,6 +45,10 @@ export const ROLE_PERMISSIONS: Record<RoleKey, PermissionKey[]> = {
     PERMISSION.SYNC_VIEW,
     PERMISSION.QUEUE_VIEW,
     PERMISSION.ALERT_VIEW,
+    // Assessment staff verify a candidate's paper; they already hold PII_UNMASK.
+    PERMISSION.MANUAL_VERIFICATION_VIEW,
+    PERMISSION.MANUAL_VERIFICATION_EXECUTE,
+    PERMISSION.MANUAL_VERIFICATION_VIEW_SENSITIVE,
   ],
   [ROLE.SCHOOL_USER]: [
     PERMISSION.DASHBOARD_VIEW,

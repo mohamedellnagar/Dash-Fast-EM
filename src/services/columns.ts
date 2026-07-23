@@ -1,3 +1,5 @@
+import { formatInZone } from '../lib/exam-time';
+import { env } from '../config/env';
 // Canonical registration table columns. Shared by the Live Monitoring table,
 // saved views (column selection/order), and exports so they stay consistent.
 // Each column exposes a getter that returns the RAW value (or null when the
@@ -43,7 +45,14 @@ export const REGISTRATION_COLUMNS: ColumnDef[] = [
   { key: 'AttendanceOriginal', label: 'Attendance', defaultVisible: false, get: (r) => r.attendanceOriginal ?? null },
   { key: 'FastTestStatus', label: 'Status', defaultVisible: true, get: (r) => r.dashboardStatus ?? null },
   { key: 'RegistrationDate', label: 'Registration Date', defaultVisible: false, get: (r) => r.fastTestRegistrationDate ?? null },
-  { key: 'ActualStartTime', label: 'Actual Start', defaultVisible: true, get: (r) => r.actualStartTime ?? null },
+  // Exam start is shown on the local clock. FastTest records it on a US clock
+  // and sends it with no timezone, so the raw string would read hours off; the
+  // converted instant is used, with the vendor original kept as a separate
+  // opt-in column for troubleshooting.
+  { key: 'ActualStartTime', label: `Actual Start (${env.displayTimezone})`, defaultVisible: true,
+    get: (r) => formatInZone(r.actualStartTimeUtc, env.displayTimezone) ?? null },
+  { key: 'ActualStartTimeRaw', label: 'Actual Start (FastTest raw)', defaultVisible: false,
+    get: (r) => r.actualStartTime ?? null },
   { key: 'TimeUsed', label: 'Time Used (s)', defaultVisible: true, numeric: true, get: (r) => r.secondsUsed ?? null },
   { key: 'RawScore', label: 'Raw Score', defaultVisible: true, numeric: true, get: (r) => firstResult(r)?.rawScore ?? null },
   { key: 'ScaledScore', label: 'Scaled Score', defaultVisible: false, numeric: true, get: (r) => firstResult(r)?.scaledScore ?? null },

@@ -108,7 +108,7 @@
 
 <div class="panel">
   <h2>Sync by Academic Year</h2>
-  <p class="muted" style="font-size:12px">Choose which academic years the worker syncs. Turning a year OFF stops scheduling new jobs for it (already-queued jobs finish).</p>
+  <p class="muted" style="font-size:12px">Choose which academic years the worker syncs. Turning a year OFF stops all sync for it: no new jobs are scheduled, anything already queued is cancelled, and nothing queued for that year can be claimed. Turning it back ON re-creates the work.</p>
   <table>
     <thead><tr><th>Academic Year</th><th>Registrations</th><th>Sync</th><th></th></tr></thead>
     <tbody>
@@ -185,10 +185,23 @@
 </div>
 
 <script>
-async function post(url, body){ const r = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json','Accept':'application/json'}, body: body?JSON.stringify(body):undefined}); return r.json(); }
-document.querySelectorAll('.job-retry').forEach(function(b){ b.onclick = async function(){ await post('/api/queue/jobs/'+b.dataset.id+'/retry'); location.reload(); }; });
-document.querySelectorAll('.dl-requeue').forEach(function(b){ b.onclick = async function(){ await post('/api/queue/jobs/'+b.dataset.id+'/requeue'); location.reload(); }; });
-document.querySelectorAll('.ws-pause').forEach(function(b){ b.onclick = async function(){ await post('/api/queue/workspaces/'+b.dataset.id+'/pause', {paused: b.dataset.paused!=='true'}); location.reload(); }; });
+// Every control on this page posts through here. It used to swallow failures —
+// a rejected request still reloaded the page, so an operator saw the old state
+// and assumed the button was broken. Failures are now surfaced.
+async function post(url, body){
+  var r = await fetch(url, {method:'POST', headers:{'Content-Type':'application/json','Accept':'application/json'}, body: body?JSON.stringify(body):undefined});
+  var data = null;
+  try { data = await r.json(); } catch(e) { /* empty or non-JSON body */ }
+  if (!r.ok) {
+    var msg = (data && (data.message || data.error)) || ('HTTP ' + r.status);
+    alert('Action failed: ' + msg);
+    throw new Error(msg);
+  }
+  return data;
+}
+document.querySelectorAll('.job-retry').forEach(function(b){ b.onclick = async function(){ try { await post('/api/queue/jobs/'+b.dataset.id+'/retry'); location.reload(); } catch(e){} }; });
+document.querySelectorAll('.dl-requeue').forEach(function(b){ b.onclick = async function(){ try { await post('/api/queue/jobs/'+b.dataset.id+'/requeue'); location.reload(); } catch(e){} }; });
+document.querySelectorAll('.ws-pause').forEach(function(b){ b.onclick = async function(){ try { await post('/api/queue/workspaces/'+b.dataset.id+'/pause', {paused: b.dataset.paused!=='true'}); location.reload(); } catch(e){} }; });
 var rf = document.getElementById('retryFailed'); if(rf) rf.onclick = async function(){ if(!confirm('Requeue all failed/dead-letter jobs?'))return; var j=await post('/api/queue/retry-failed'); alert('Requeued '+j.requeued); location.reload(); };
 var pj = document.getElementById('pauseJt'); if(pj) pj.onclick = async function(){ await post('/api/queue/job-types/'+document.getElementById('jobTypeSel').value+'/pause', {paused:true}); alert('Paused'); };
 var rj = document.getElementById('resumeJt'); if(rj) rj.onclick = async function(){ await post('/api/queue/job-types/'+document.getElementById('jobTypeSel').value+'/pause', {paused:false}); alert('Resumed'); };
@@ -235,8 +248,17 @@ document.querySelectorAll('.subj-toggle').forEach(function(b){ b.onclick = async
   location.reload();
 }; });
 document.querySelectorAll('.year-toggle').forEach(function(b){ b.onclick = async function(){
-  await post('/api/queue/academic-years/pause', {academicYear: decodeURIComponent(b.dataset.year), paused: b.dataset.paused!=='true'});
-  location.reload();
+  var year = decodeURIComponent(b.dataset.year);
+  var turningOff = b.dataset.paused !== 'true';
+  if (turningOff && !confirm('Switch sync OFF for ' + year + '?\n\nEverything queued for this year will be cancelled and the queue cleared. Switching it back ON re-creates the work.')) return;
+  try {
+    var res = await post('/api/queue/academic-years/pause', {academicYear: year, paused: turningOff});
+    if (turningOff) {
+      alert('Sync OFF for ' + year + '.\n\nCancelled ' + (res.cancelled || 0) + ' queued job(s).'
+        + (res.stillRunning ? '\n' + res.stillRunning + ' already running will finish.' : ''));
+    }
+    location.reload();
+  } catch (e) { /* post() already reported it; leave the page as-is */ }
 }; });
 </script>
 

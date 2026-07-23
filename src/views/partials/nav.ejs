@@ -34,7 +34,8 @@
 
       <% if (showScreens) { %>
         <div class="nav-group">Live Screens</div>
-        <% if (can('dashboard:view')) { %><a href="/overview" class="<%= nav==='wall'?'active':'' %>">📺 Live Overview</a><% } %>
+<%# The wall is unfiltered global data — school-scoped users are blocked server-side, so don't offer the link. %>
+        <% if (can('dashboard:view') && !(principal && principal.isSchoolScoped)) { %><a href="/overview" class="<%= nav==='wall'?'active':'' %>">📺 Live Overview</a><% } %>
         <% if (can('queue:view')) { %><a href="/ops" class="<%= nav==='ops-wall'?'active':'' %>">🖥️ Operations Center</a><% } %>
       <% } %>
 
@@ -50,7 +51,7 @@
         <% if (can('sync:view')) { %><a href="/sync" class="<%= nav==='sync-control'?'active':'' %>">🎛️ Sync Control Center</a><% } %>
         <% if (can('queue:view')) { %><a href="/admin/queue" class="<%= nav==='queue'?'active':'' %>">🗂️ Queue Monitoring</a><% } %>
         <% if (can('sync:view')) { %><a href="/admin/sync-history" class="<%= nav==='sync-history'?'active':'' %>">🕘 Sync History</a><% } %>
-        <% if (can('sync:manual')) { %><a href="/verify" class="<%= nav==='verify'?'active':'' %>">🔎 Verify</a><% } %>
+        <% if (can('manual_verification.view')) { %><a href="/verify" class="<%= nav==='verify'?'active':'' %>">🔎 Manual Verification</a><% } %>
         <% if (can('apimonitoring:view')) { %><a href="/admin/fasttest-health" class="<%= nav==='fasttest-health'?'active':'' %>">🩺 FastTest Health</a><% } %>
         <% if (can('alert:view')) { %><a href="/admin/alerts" class="<%= nav==='alerts'?'active':'' %>">🔔 Alerts</a><% } %>
       <% } %>

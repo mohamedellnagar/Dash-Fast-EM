@@ -12,6 +12,7 @@ function uniq(prefix: string) {
 
 export interface RegSpec {
   studentExternalId?: string;
+  emiratesId?: string; // participation coverage counts distinct students by this
   schoolId?: string;
   subjectId?: string;
   examSubject?: string;
@@ -52,6 +53,7 @@ export async function makeRegistration(spec: RegSpec = {}) {
   const reg = await prisma.examRegistration.create({
     data: {
       studentExternalId: spec.studentExternalId ?? uniq('STU'),
+      emiratesId: spec.emiratesId ?? null,
       studentId: spec.linkStudent === false ? null : (spec.studentId ?? null),
       schoolId: spec.schoolId ?? null,
       subjectId: spec.subjectId ?? null,

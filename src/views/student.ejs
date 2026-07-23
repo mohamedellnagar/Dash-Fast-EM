@@ -46,7 +46,14 @@
       <dt>Test Id / Name</dt><dd><%= reg.fastTestTestId || '—' %> / <%= reg.fastTestTestName || '—' %></dd>
       <dt>Examinee Id</dt><dd class="mono"><%= reg.fastTestExamineeId || '—' %></dd>
       <dt>Registration Date</dt><dd><%= reg.fastTestRegistrationDate || '—' %></dd>
-      <dt>Actual Start Time</dt><dd><%= reg.actualStartTime || '—' %></dd>
+      <dt>Actual Start Time</dt>
+      <dd>
+        <%= localStart(reg) || '—' %>
+        <% if (localStart(reg)) { %>
+          <span class="muted" style="font-size:12px">(<%= displayTimezone %>)</span>
+          <div class="muted" style="font-size:11px">FastTest raw: <%= reg.actualStartTime %></div>
+        <% } %>
+      </dd>
       <dt>Seconds Used</dt><dd><%= reg.secondsUsed != null ? reg.secondsUsed : '—' %></dd>
     </dl>
   </div>

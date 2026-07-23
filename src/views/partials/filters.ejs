@@ -47,6 +47,30 @@
       <label>Reg. Date To<input type="date" name="registrationDateTo" value="<%= v('registrationDateTo') %>" /></label>
       <label>Exam Start From<input type="date" name="examStartFrom" value="<%= v('examStartFrom') %>" /></label>
       <label>Exam End To<input type="date" name="examEndTo" value="<%= v('examEndTo') %>" /></label>
+      <%# Actual sitting: the date it happened, and the hour of day it began.
+          Both read the converted local instant, not FastTest's US clock. %>
+      <label>Actual Start From<input type="date" name="actualStartFrom" value="<%= v('actualStartFrom') %>" /></label>
+      <label>Actual Start To<input type="date" name="actualStartTo" value="<%= v('actualStartTo') %>" /></label>
+      <label>Started After (hour)
+        <select name="startHourFrom">
+          <option value="">Any</option>
+          <% for (var h = 0; h < 24; h++) { %>
+            <option value="<%= h %>" <%= String(q.startHourFrom) === String(h) ? 'selected' : '' %>>
+              <%= (h < 10 ? '0' : '') + h %>:00
+            </option>
+          <% } %>
+        </select>
+      </label>
+      <label>Started Before (hour)
+        <select name="startHourTo">
+          <option value="">Any</option>
+          <% for (var h2 = 0; h2 < 24; h2++) { %>
+            <option value="<%= h2 %>" <%= String(q.startHourTo) === String(h2) ? 'selected' : '' %>>
+              <%= (h2 < 10 ? '0' : '') + h2 %>:59
+            </option>
+          <% } %>
+        </select>
+      </label>
       <label>Score Min<input type="number" name="scoreMin" value="<%= v('scoreMin') %>" /></label>
       <label>Score Max<input type="number" name="scoreMax" value="<%= v('scoreMax') %>" /></label>
       <label>Duration Min (s)<input type="number" name="durationMin" value="<%= v('durationMin') %>" /></label>

@@ -42,6 +42,8 @@ export const env = {
   // window matches local operating hours regardless of the server's clock (which
   // is UTC in most containers).
   timezone: str('SYNC_TZ', 'Asia/Dubai'),
+  // IANA zone every exam timestamp is RENDERED in for operators.
+  displayTimezone: str('DISPLAY_TZ', 'Asia/Dubai'),
 
   databaseUrl: str('DATABASE_URL', 'file:./dev.db'),
 
@@ -54,6 +56,12 @@ export const env = {
   bootstrapAdminPassword: str('BOOTSTRAP_ADMIN_PASSWORD', 'ChangeMe!Admin123'),
 
   fasttest: {
+    // IANA zone FastTest's own clock runs in. Their API returns naive strings
+    // with no offset, so this is the only way to place them on a timeline.
+    // Confirmed as US Central against 71,589 stored payloads; it must be an
+    // IANA name (not a fixed offset) because the US observes DST and the UAE
+    // does not, so the gap is +9h in summer and +10h in winter.
+    sourceTimezone: str('FASTTEST_SOURCE_TZ', 'America/Chicago'),
     baseUrl: str('FASTTEST_BASE_URL', 'https://uae.fasttestweb.com/FastTest/api'),
     username: str('FASTTEST_AUTH_USERNAME', ''),
     password: str('FASTTEST_AUTH_PASSWORD', ''),
