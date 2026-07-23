@@ -1,153 +1,577 @@
 <%- include('partials/head') %>
 <%- include('partials/nav') %>
 
-<div class="panel">
-  <h2 style="margin-top:0">🔎 Manual Verification</h2>
-  <p class="muted" style="font-size:13px;margin-top:-4px">
-    Enter a <b>TestCode</b> and <b>ExamName</b> to fetch the live FastTest status/results and compare
-    them against what is stored locally. This is a <b>read-only probe</b> — nothing is added to or changed in the database.
-  </p>
-  <div class="toolbar" style="align-items:flex-end;gap:14px;flex-wrap:wrap">
-    <label>TestCode
-      <input id="vCode" placeholder="e.g. FUJ-290-263-565" style="min-width:240px" />
-    </label>
-    <label>ExamName
-      <input id="vExam" placeholder="e.g. Arabic Grade 5" style="min-width:260px" />
-    </label>
-    <button class="btn sm" id="vBtn" type="button">Verify ⟳</button>
-    <span id="vHint" class="muted" style="font-size:13px"></span>
-  </div>
-</div>
+<style>
+  /* Scoped to this page. The rest of the app is LTR-only, so RTL is opted into
+     here via [dir=rtl] on the page root rather than on <html>. */
+  #mv .row2{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:10px 22px}
+  #mv .kv{display:grid;grid-template-columns:minmax(140px,auto) 1fr;gap:5px 14px;font-size:13px}
+  #mv .kv dt{color:#64748b;white-space:nowrap}
+  #mv .kv dd{margin:0;font-weight:600;word-break:break-word}
+  #mv .badge{display:inline-block;padding:2px 9px;border-radius:20px;font-size:12px;font-weight:700;white-space:nowrap}
+  #mv .b-ok{background:#16a34a22;color:#15803d}
+  #mv .b-warn{background:#f59e0b22;color:#b45309}
+  #mv .b-bad{background:#ef444422;color:#b91c1c}
+  #mv .b-none{background:#64748b22;color:#475569}
+  #mv .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+  #mv .card{border:1px solid #e2e8f0;border-radius:10px;padding:10px 12px;background:#ffffff08}
+  #mv .card .t{font-size:11px;text-transform:uppercase;letter-spacing:.4px;color:#64748b;font-weight:700}
+  #mv .card .v{font-size:15px;font-weight:700;margin-top:4px;word-break:break-word}
+  #mv pre.raw{overflow:auto;max-height:360px;background:#0b12200a;padding:10px;border-radius:8px;font-size:12px}
+  #mv .sec{margin-top:14px}
+  #mv .muted-sm{font-size:12px;color:#64748b}
+  #mv .spin{display:inline-block;width:12px;height:12px;border:2px solid #94a3b8;border-top-color:transparent;
+    border-radius:50%;animation:mvspin .7s linear infinite;vertical-align:-1px}
+  @keyframes mvspin{to{transform:rotate(360deg)}}
+  @media (prefers-reduced-motion: reduce){ #mv .spin{animation:none} }
+  #mv .notice{border-inline-start:4px solid #2563eb;background:#2563eb0d;padding:9px 13px;border-radius:8px;font-size:13px}
+  /* RTL: mirror the page box; keep codes, URLs and JSON left-to-right. */
+  #mv[dir="rtl"]{text-align:right}
+  #mv[dir="rtl"] .kv dt{text-align:right}
+  #mv pre.raw,#mv .mono{direction:ltr;text-align:left;font-family:ui-monospace,Menlo,monospace}
+</style>
 
-<div id="vOut" style="display:none">
-  <!-- Verdict banner -->
-  <div class="panel" id="vVerdict" style="border-left:5px solid #64748b"></div>
-
-  <!-- Resolution + live status -->
+<div id="mv" dir="ltr" lang="en">
+  <!-- ============ A. SEARCH ============ -->
   <div class="panel">
-    <h3 style="margin-top:0">Live FastTest</h3>
-    <table class="kv" style="width:100%;border-collapse:collapse">
-      <tbody id="vLive"></tbody>
-    </table>
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:12px;flex-wrap:wrap">
+      <div>
+        <h2 style="margin:0" data-i18n="title">🔎 Manual Verification</h2>
+        <p class="muted-sm" style="margin:4px 0 0" data-i18n="subtitle"></p>
+      </div>
+      <button class="btn secondary sm" type="button" id="mvLang">العربية</button>
+    </div>
+
+    <div class="notice" style="margin:10px 0 14px" data-i18n="readonly"></div>
+
+    <div class="toolbar" style="align-items:flex-end;gap:14px;flex-wrap:wrap">
+      <label data-i18n-label="testCode">Test Code
+        <input id="mvCode" placeholder="MAK-665-486-329" style="min-width:250px" class="mono" autocomplete="off" />
+      </label>
+      <label id="mvWsWrap" style="display:none" data-i18n-label="workspace">Workspace
+        <select id="mvWs" style="min-width:220px"></select>
+      </label>
+      <button class="btn sm" id="mvGo" type="button" data-i18n="verify">Verify</button>
+      <button class="btn secondary sm" id="mvClear" type="button" data-i18n="clear">Clear</button>
+      <span id="mvHint" class="muted-sm"></span>
+    </div>
+    <div class="muted-sm" style="margin-top:7px">
+      <span data-i18n="normalized"></span>
+      <b class="mono" id="mvNorm">—</b>
+    </div>
   </div>
 
-  <!-- Comparison -->
-  <div class="panel" id="vCmpPanel" style="display:none">
-    <h3 style="margin-top:0">Comparison with stored record</h3>
-    <table style="width:100%;border-collapse:collapse" class="grid">
-      <thead>
-        <tr><th style="text-align:left">Field</th><th style="text-align:left">Live (FastTest)</th><th style="text-align:left">Stored (DB)</th><th style="text-align:left">Match</th></tr>
-      </thead>
-      <tbody id="vCmp"></tbody>
-    </table>
-  </div>
+  <div id="mvOut" style="display:none">
+    <!-- ============ B. SUMMARY ============ -->
+    <div class="panel sec">
+      <h3 style="margin-top:0" data-i18n="summary">Verification summary</h3>
+      <div class="cards" id="mvCards"></div>
+      <div id="mvErrors" style="margin-top:12px"></div>
+    </div>
 
-  <!-- Raw payloads -->
-  <div class="panel">
-    <details>
-      <summary style="cursor:pointer;font-weight:600">Raw status payload</summary>
-      <pre id="vRawStatus" style="overflow:auto;max-height:340px;background:#0b12200a;padding:10px;border-radius:8px"></pre>
-    </details>
-    <details>
-      <summary style="cursor:pointer;font-weight:600">Raw results payload</summary>
-      <pre id="vRawResults" style="overflow:auto;max-height:340px;background:#0b12200a;padding:10px;border-radius:8px"></pre>
-    </details>
+    <!-- ============ F. CALCULATED ============ -->
+    <div class="panel sec" id="mvCalcPanel" style="display:none">
+      <h3 style="margin-top:0" data-i18n="calculated">Calculated verification values</h3>
+      <div class="cards" id="mvCalc"></div>
+      <div class="muted-sm" id="mvTimeNote" style="margin-top:9px;display:none"></div>
+      <table style="width:100%;border-collapse:collapse;margin-top:14px" class="grid">
+        <thead><tr>
+          <th style="text-align:start" data-i18n="check">Check</th>
+          <th style="text-align:start" data-i18n="local">Local</th>
+          <th style="text-align:start" data-i18n="fasttest">FastTest</th>
+          <th style="text-align:start" data-i18n="verdict">Verdict</th>
+        </tr></thead>
+        <tbody id="mvCmp"></tbody>
+      </table>
+    </div>
+
+    <!-- ============ C. LOCAL RECORD ============ -->
+    <div class="panel sec">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+        <h3 style="margin:0" data-i18n="localData">Local registration data</h3>
+        <button class="btn secondary sm" type="button" id="mvReveal" style="display:none" data-i18n="reveal">Reveal masked values</button>
+      </div>
+      <div id="mvLocal" style="margin-top:10px"></div>
+    </div>
+
+    <!-- ============ D. STATUS ============ -->
+    <div class="panel sec">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+        <h3 style="margin:0" data-i18n="statusData">FastTest status data</h3>
+        <button class="btn secondary sm" type="button" data-retry="status" style="display:none" data-i18n="retry">Retry</button>
+      </div>
+      <div id="mvStatus" style="margin-top:10px"></div>
+    </div>
+
+    <!-- ============ E. RESULTS ============ -->
+    <div class="panel sec">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap">
+        <h3 style="margin:0" data-i18n="resultsData">FastTest results data</h3>
+        <button class="btn secondary sm" type="button" data-retry="results" style="display:none" data-i18n="retry">Retry</button>
+      </div>
+      <div id="mvResults" style="margin-top:10px"></div>
+    </div>
+
+    <!-- ============ G. RAW (developer) ============ -->
+    <% if (caps.raw) { %>
+    <div class="panel sec">
+      <details>
+        <summary style="cursor:pointer;font-weight:600" data-i18n="rawSection">Raw API responses (developer)</summary>
+        <div style="margin-top:12px">
+          <dl class="kv" id="mvDiag"></dl>
+          <div class="toolbar" style="margin:12px 0">
+            <button class="btn secondary sm" type="button" id="mvCopy" data-i18n="copyJson">Copy JSON</button>
+            <% if (caps.export) { %>
+            <button class="btn secondary sm" type="button" id="mvDownload" data-i18n="downloadJson">Download JSON</button>
+            <button class="btn secondary sm" type="button" id="mvReport" data-i18n="copyReport">Copy diagnostic report</button>
+            <% } %>
+          </div>
+          <h4 style="margin:12px 0 4px" data-i18n="rawStatus">Status API raw JSON</h4>
+          <pre class="raw" id="mvRawStatus"></pre>
+          <h4 style="margin:12px 0 4px" data-i18n="rawResults">Results API raw JSON</h4>
+          <pre class="raw" id="mvRawResults"></pre>
+        </div>
+      </details>
+    </div>
+    <% } %>
+
+    <!-- ============ H. HISTORY ============ -->
+    <div class="panel sec">
+      <h3 style="margin-top:0" data-i18n="history">Recent checks for this Test Code</h3>
+      <table style="width:100%;border-collapse:collapse" class="grid">
+        <thead><tr>
+          <th style="text-align:start" data-i18n="when">When</th>
+          <th style="text-align:start" data-i18n="by">By</th>
+          <th style="text-align:start" data-i18n="workspace">Workspace</th>
+          <th style="text-align:start" data-i18n="local">Local</th>
+          <th style="text-align:start">Status</th>
+          <th style="text-align:start">Results</th>
+          <th style="text-align:start" data-i18n="error">Error</th>
+        </tr></thead>
+        <tbody id="mvHist"></tbody>
+      </table>
+    </div>
   </div>
 </div>
 
 <script>
 (function () {
-  var btn = document.getElementById('vBtn');
-  var out = document.getElementById('vOut');
-  var hint = document.getElementById('vHint');
+  var CAPS = <%- JSON.stringify(caps) %>;
+  var root = document.getElementById('mv');
+  var lastResult = null;
+  var revealed = false;
 
+  // ---- i18n (page-scoped; the app has no global i18n framework) ------------
+  var I18N = {
+    en: {
+      title: '🔎 Manual Verification',
+      subtitle: 'Look up everything FastTest and this dashboard know about a single Test Code.',
+      readonly: 'This page is read-only. It never creates scheduling, registrations or Test Codes, and never changes student status or results in FastTest.',
+      testCode: 'Test Code', workspace: 'Workspace', verify: 'Verify', clear: 'Clear',
+      normalized: 'Normalized code sent to FastTest:',
+      summary: 'Verification summary', calculated: 'Calculated verification values',
+      localData: 'Local registration data', statusData: 'FastTest status data',
+      resultsData: 'FastTest results data', rawSection: 'Raw API responses (developer)',
+      rawStatus: 'Status API raw JSON', rawResults: 'Results API raw JSON',
+      history: 'Recent checks for this Test Code',
+      check: 'Check', local: 'Local', fasttest: 'FastTest', verdict: 'Verdict',
+      when: 'When', by: 'By', error: 'Error', retry: 'Retry', retryAll: 'Retry all',
+      reveal: 'Reveal masked values', hide: 'Hide masked values',
+      copyJson: 'Copy JSON', downloadJson: 'Download JSON', copyReport: 'Copy diagnostic report',
+      additional: 'Additional fields', scores: 'Scores', noData: 'No data returned.',
+      enterCode: 'Enter a Test Code.', checking: 'Checking…', copied: 'Copied.',
+      noLocal: 'This Test Code has no registration in this dashboard.',
+      noPerm: 'You do not have permission to run verifications.',
+      MATCH: 'Match', WARNING: 'Warning', MISMATCH: 'Mismatch', NOT_ENOUGH_DATA: 'Not enough data',
+      found: 'Found', notFound: 'Not found', success: 'Success', failed: 'Failed',
+      timeUnknown: 'Cannot be determined',
+    },
+    ar: {
+      title: '🔎 التحقق اليدوي',
+      subtitle: 'استعراض كل ما يعرفه FastTest وهذه اللوحة عن كود اختبار واحد.',
+      readonly: 'هذه الصفحة للقراءة فقط. لا تنشئ جدولة أو تسجيلات أو أكواد اختبار، ولا تغيّر حالة الطالب أو نتائجه في FastTest.',
+      testCode: 'كود الاختبار', workspace: 'مساحة العمل', verify: 'تحقّق', clear: 'مسح',
+      normalized: 'الكود بعد التنسيق المُرسل إلى FastTest:',
+      summary: 'ملخص التحقق', calculated: 'القيم المحسوبة',
+      localData: 'بيانات التسجيل المحلية', statusData: 'بيانات الحالة من FastTest',
+      resultsData: 'بيانات النتائج من FastTest', rawSection: 'الاستجابات الخام (للمطوّرين)',
+      rawStatus: 'استجابة الحالة الخام (JSON)', rawResults: 'استجابة النتائج الخام (JSON)',
+      history: 'عمليات التحقق الأخيرة لهذا الكود',
+      check: 'الفحص', local: 'محلي', fasttest: 'FastTest', verdict: 'النتيجة',
+      when: 'الوقت', by: 'بواسطة', error: 'الخطأ', retry: 'إعادة المحاولة', retryAll: 'إعادة الكل',
+      reveal: 'إظهار القيم المخفية', hide: 'إخفاء القيم',
+      copyJson: 'نسخ JSON', downloadJson: 'تنزيل JSON', copyReport: 'نسخ تقرير التشخيص',
+      additional: 'حقول إضافية', scores: 'الدرجات', noData: 'لا توجد بيانات.',
+      enterCode: 'أدخل كود الاختبار.', checking: 'جارٍ الفحص…', copied: 'تم النسخ.',
+      noLocal: 'لا يوجد تسجيل لهذا الكود في هذه اللوحة.',
+      noPerm: 'لا تملك صلاحية تشغيل عمليات التحقق.',
+      MATCH: 'مطابق', WARNING: 'تحذير', MISMATCH: 'غير مطابق', NOT_ENOUGH_DATA: 'بيانات غير كافية',
+      found: 'موجود', notFound: 'غير موجود', success: 'ناجح', failed: 'فشل',
+      timeUnknown: 'يتعذّر تحديده',
+    },
+  };
+  var lang = localStorage.getItem('mvLang') || 'en';
+  function t(k) { return (I18N[lang] && I18N[lang][k]) || I18N.en[k] || k; }
+
+  function applyLang() {
+    root.setAttribute('dir', lang === 'ar' ? 'rtl' : 'ltr');
+    root.setAttribute('lang', lang);
+    document.getElementById('mvLang').textContent = lang === 'ar' ? 'English' : 'العربية';
+    root.querySelectorAll('[data-i18n]').forEach(function (el) { el.textContent = t(el.getAttribute('data-i18n')); });
+    root.querySelectorAll('[data-i18n-label]').forEach(function (el) {
+      // Replace only the label's own text node, keeping its input/select child.
+      var key = el.getAttribute('data-i18n-label');
+      if (el.firstChild && el.firstChild.nodeType === 3) el.firstChild.nodeValue = t(key) + ' ';
+    });
+    document.getElementById('mvReveal').textContent = revealed ? t('hide') : t('reveal');
+    if (lastResult) render(lastResult);
+  }
+
+  // ---- helpers ------------------------------------------------------------
   function esc(v) {
     if (v === null || v === undefined || v === '') return '—';
-    return String(v).replace(/[&<>"]/g, function (c) {
-      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c];
+    return String(v).replace(/[&<>"']/g, function (c) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
     });
   }
-  function row(k, v) { return '<tr><td style="padding:4px 12px 4px 0;color:#64748b;white-space:nowrap">' + esc(k) + '</td><td style="padding:4px 0"><b>' + esc(v) + '</b></td></tr>'; }
+  function kv(k, v, mono) {
+    return '<dt>' + esc(k) + '</dt><dd' + (mono ? ' class="mono"' : '') + '>' + esc(v) + '</dd>';
+  }
+  function badge(cls, text) { return '<span class="badge ' + cls + '">' + esc(text) + '</span>'; }
+  function verdictBadge(v) {
+    var cls = v === 'MATCH' ? 'b-ok' : v === 'WARNING' ? 'b-warn' : v === 'MISMATCH' ? 'b-bad' : 'b-none';
+    return badge(cls, t(v));
+  }
+  function card(title, valueHtml) {
+    return '<div class="card"><div class="t">' + esc(title) + '</div><div class="v">' + valueHtml + '</div></div>';
+  }
+  /**
+   * Render an arbitrary object as key/value rows — unknown API fields included.
+   * Nested objects are flattened one level ("scoredItems.correct") because
+   * FastTest nests the item counts that way; arrays are handled by the caller.
+   */
+  function objRows(obj, skip) {
+    var out = '';
+    Object.keys(obj || {}).forEach(function (k) {
+      if (skip && skip.indexOf(k) !== -1) return;
+      if (k.charAt(0) === '_') return;
+      var v = obj[k];
+      if (Array.isArray(v)) return; // caller renders lists
+      if (v && typeof v === 'object') {
+        Object.keys(v).forEach(function (k2) {
+          var v2 = v[k2];
+          out += kv(k + '.' + k2, (v2 && typeof v2 === 'object') ? JSON.stringify(v2) : v2);
+        });
+        return;
+      }
+      out += kv(k, v);
+    });
+    return out;
+  }
 
-  async function verify() {
-    var testCode = document.getElementById('vCode').value.trim();
-    var examName = document.getElementById('vExam').value.trim();
-    if (!testCode || !examName) { hint.textContent = 'Enter both TestCode and ExamName.'; return; }
-    hint.textContent = 'Checking…'; btn.disabled = true; out.style.display = 'none';
+  // ---- request ------------------------------------------------------------
+  function setHint(html) { document.getElementById('mvHint').innerHTML = html; }
+
+  async function run(reveal) {
+    var code = document.getElementById('mvCode').value.trim();
+    if (!code) { setHint(esc(t('enterCode'))); return; }
+    document.getElementById('mvNorm').textContent = code.replace(/[-\s]/g, '').toUpperCase();
+
+    var body = { testCode: code };
+    var wsSel = document.getElementById('mvWs');
+    if (CAPS.overrideWorkspace && wsSel && wsSel.value) body.workspaceId = wsSel.value;
+    if (reveal) body.revealSensitive = true;
+
+    setHint('<span class="spin"></span> ' + esc(t('checking')));
+    document.getElementById('mvGo').disabled = true;
     try {
-      var resp = await fetch('/api/verify', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ testCode: testCode, examName: examName }),
+      var resp = await fetch('/api/manual-verification/test-code', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
       });
       var r = await resp.json();
+      if (!resp.ok) { setHint(badge('b-bad', r.error || ('HTTP ' + resp.status))); return; }
+      lastResult = r;
+      revealed = !!(r.localRecord && r.localRecord._sensitiveRevealed);
+      setHint('');
       render(r);
     } catch (e) {
-      hint.textContent = 'Request failed: ' + e.message;
+      setHint(badge('b-bad', e.message));
     } finally {
-      btn.disabled = false;
+      document.getElementById('mvGo').disabled = false;
     }
   }
 
+  // ---- render -------------------------------------------------------------
   function render(r) {
-    hint.textContent = '';
-    out.style.display = '';
+    document.getElementById('mvOut').style.display = '';
+    document.getElementById('mvNorm').textContent = r.normalizedTestCode || '—';
 
-    var verdict = document.getElementById('vVerdict');
-    if (!r.ok) {
-      verdict.style.borderLeftColor = '#dc2626';
-      verdict.innerHTML = '<b style="color:#dc2626">✖ Could not verify</b> — ' + esc(r.error) + ' <span class="muted">(' + esc(r.errorType) + ')</span>';
-    } else if (!r.existsInDb) {
-      verdict.style.borderLeftColor = '#2563eb';
-      verdict.innerHTML = '<b style="color:#2563eb">ℹ Live data found</b> — this TestCode is <b>not stored locally</b>, so there is nothing to compare (verification only).';
-    } else if (r.inSync) {
-      verdict.style.borderLeftColor = '#16a34a';
-      verdict.innerHTML = '<b style="color:#16a34a">✔ In sync</b> — the stored record matches live FastTest.';
-    } else {
-      verdict.style.borderLeftColor = '#d97706';
-      verdict.innerHTML = '<b style="color:#d97706">⚠ Out of sync</b> — the stored record differs from live FastTest (see comparison below).';
-    }
+    var st = r.fastTest.status, rs = r.fastTest.results;
+    var ftStatus = (st.data && st.data.status) || null;
+    var ftName = st.data ? [st.data.firstName, st.data.lastName].filter(Boolean).join(' ') : null;
+    var loc = r.localRecord || {};
 
-    var live = document.getElementById('vLive');
-    var lines = '';
-    lines += row('TestCode (normalized)', r.testCodeNormalized);
-    lines += row('ExamName', r.examName);
-    lines += row('Workspace', r.workspace ? (r.workspace.name + ' [' + r.workspace.subjectCode + ']') : null);
-    lines += row('Live status (raw)', r.liveStatusRaw);
-    lines += row('Live status (dashboard)', r.liveDashboardStatus);
-    if (r.liveExaminee) {
-      lines += row('Examinee', [r.liveExaminee.firstName, r.liveExaminee.lastName].filter(Boolean).join(' '));
-      lines += row('External ID', r.liveExaminee.externalId);
-    }
-    if (r.liveResultSummary) {
-      var s = r.liveResultSummary;
-      lines += row('Test name', s.testName);
-      lines += row('Start time', s.startTime);
-      lines += row('Seconds used', s.secondsUsed);
-      lines += row('Passed', s.passed === null ? null : (s.passed ? 'Yes' : 'No'));
-      lines += row('Raw / Scaled score', (s.rawScore == null ? '—' : s.rawScore) + ' / ' + (s.scaledScore == null ? '—' : s.scaledScore));
-      lines += row('Correct / Incorrect / Skipped', (s.correct == null ? '—' : s.correct) + ' / ' + (s.incorrect == null ? '—' : s.incorrect) + ' / ' + (s.skipped == null ? '—' : s.skipped));
-    }
-    live.innerHTML = lines;
+    // --- B. summary cards
+    var cards = '';
+    cards += card(t('local'), r.localRecordFound ? badge('b-ok', t('found')) : badge('b-warn', t('notFound')));
+    cards += card('Status API', st.success
+      ? badge('b-ok', t('success') + ' · ' + (st.httpCode || '') + (st.latencyMs != null ? ' · ' + st.latencyMs + 'ms' : ''))
+      : badge('b-bad', t('failed') + ' · ' + (st.httpCode || st.errorType || '')));
+    cards += card('Results API', rs.success
+      ? badge('b-ok', t('success') + ' · ' + (rs.httpCode || '') + (rs.latencyMs != null ? ' · ' + rs.latencyMs + 'ms' : ''))
+      : badge('b-warn', t('failed') + ' · ' + (rs.httpCode || rs.errorType || '')));
+    cards += card(t('workspace'), esc(r.workspace ? r.workspace.name + ' [' + r.workspace.subject + ']' : null)
+      + (r.workspace ? '<div class="muted-sm" style="font-weight:400">' + esc(r.workspace.resolvedBy) + '</div>' : ''));
+    cards += card('FastTest status', esc(ftStatus));
+    cards += card('Student', esc(ftName || loc.nameEnglish || loc.nameArabic));
+    cards += card('School', esc(loc.schoolName));
+    cards += card('Subject', esc(loc.examSubject));
+    cards += card('Exam', esc(loc.examName || (st.data && st.data.testName)));
+    cards += card('Last checked', esc(new Date(r.checkedAt).toLocaleString()));
+    document.getElementById('mvCards').innerHTML = cards;
 
-    var cmpPanel = document.getElementById('vCmpPanel');
-    var cmp = document.getElementById('vCmp');
-    if (r.existsInDb && r.diffs && r.diffs.length) {
-      cmp.innerHTML = r.diffs.map(function (d) {
-        var mark = d.match ? '<span style="color:#16a34a">✔ match</span>' : '<span style="color:#d97706">⚠ MISMATCH</span>';
-        return '<tr><td style="padding:6px 12px 6px 0">' + esc(d.field) + '</td><td style="padding:6px 12px 6px 0">' + esc(d.live) + '</td><td style="padding:6px 12px 6px 0">' + esc(d.stored) + '</td><td style="padding:6px 0">' + mark + '</td></tr>';
+    // --- error explanations + retry. One endpoint failing never hides the other.
+    var errs = '';
+    if (r.workspaceError) {
+      errs += '<div class="notice" style="border-color:#b45309;background:#f59e0b0d">' + esc(r.workspaceError) + '</div>';
+    }
+    [['Status API', st, r.explain && r.explain.status], ['Results API', rs, r.explain && r.explain.results]]
+      .forEach(function (p) {
+        if (p[1].success || !p[1].errorType) return;
+        errs += '<div class="notice" style="border-color:#b91c1c;background:#ef44440d;margin-top:8px"><b>'
+          + esc(p[0]) + ':</b> ' + esc(p[1].errorMessage || p[1].errorType)
+          + (p[2] ? ' — ' + esc(p[2]) : '') + '</div>';
+      });
+    if (!st.success || !rs.success) {
+      errs += '<button class="btn secondary sm" type="button" id="mvRetryAll" style="margin-top:10px">'
+        + esc(t('retryAll')) + '</button>';
+    }
+    document.getElementById('mvErrors').innerHTML = errs;
+    var ra = document.getElementById('mvRetryAll');
+    if (ra) ra.addEventListener('click', function () { run(revealed); });
+    root.querySelectorAll('[data-retry]').forEach(function (b) {
+      var ok = b.getAttribute('data-retry') === 'status' ? st.success : rs.success;
+      b.style.display = ok ? 'none' : '';
+      b.onclick = function () { run(revealed); };
+    });
+
+    // --- F. calculated + comparisons
+    var calcPanel = document.getElementById('mvCalcPanel');
+    if (r.calculated || (r.comparisons && r.comparisons.length)) {
+      calcPanel.style.display = '';
+      var c = r.calculated || {};
+      var cc = '';
+      cc += card('Attempted', esc(c.attempted));
+      cc += card('Total items', esc(c.totalItems));
+      cc += card('Correct / Incorrect / Skipped', esc(c.correct) + ' / ' + esc(c.incorrect) + ' / ' + esc(c.skipped));
+      cc += card('Completion %', esc(c.completionPercentage));
+      cc += card('Duration (HH:MM:SS)', '<span class="mono">' + esc(c.formattedDuration) + '</span>');
+      // FastTest sends the start time on a US clock with no timezone and no
+      // AM/PM marker — show the converted local instant and how it was derived.
+      var et = r.examTime;
+      if (et && et.raw) {
+        cc += card('Exam start (' + esc(et.displayTimeZone) + ')', et.trustworthy
+          ? '<span class="mono">' + esc(et.localStart) + '</span>'
+          : badge('b-warn', t('timeUnknown')));
+        cc += card('Vendor clock', '<span class="mono">' + esc(et.raw) + '</span>'
+          + '<div class="muted-sm" style="font-weight:400">' + esc(et.sourceTimeZone) + '</div>');
+      }
+      document.getElementById('mvCalc').innerHTML = cc;
+      var etn = document.getElementById('mvTimeNote');
+      etn.textContent = (et && et.raw) ? et.note : '';
+      etn.style.display = (et && et.raw) ? '' : 'none';
+      document.getElementById('mvCmp').innerHTML = (r.comparisons || []).map(function (x) {
+        return '<tr><td style="padding:6px 12px 6px 0">' + esc(x.label)
+          + (x.note ? '<div class="muted-sm" style="font-weight:400">' + esc(x.note) + '</div>' : '') + '</td>'
+          + '<td style="padding:6px 12px 6px 0">' + esc(x.local) + '</td>'
+          + '<td style="padding:6px 12px 6px 0">' + esc(x.fastTest) + '</td>'
+          + '<td style="padding:6px 0">' + verdictBadge(x.verdict) + '</td></tr>';
       }).join('');
-      cmpPanel.style.display = '';
     } else {
-      cmpPanel.style.display = 'none';
+      calcPanel.style.display = 'none';
     }
 
-    document.getElementById('vRawStatus').textContent = r.liveRawStatusJson || '(none)';
-    document.getElementById('vRawResults').textContent = r.liveRawResultsJson || '(none — results are fetched only when status is COMPLETED)';
+    // --- C. local record
+    var localEl = document.getElementById('mvLocal');
+    var rev = document.getElementById('mvReveal');
+    if (!r.localRecordFound) {
+      localEl.innerHTML = '<div class="muted-sm">' + esc(t('noLocal')) + '</div>';
+      rev.style.display = 'none';
+    } else {
+      localEl.innerHTML = '<div class="row2"><dl class="kv">' + objRows(loc) + '</dl></div>';
+      rev.style.display = (CAPS.sensitive && loc._sensitiveFields && loc._sensitiveFields.length) ? '' : 'none';
+      rev.textContent = revealed ? t('hide') : t('reveal');
+    }
+
+    // --- D. status data — declared fields first, unknown ones never discarded
+    var sEl = document.getElementById('mvStatus');
+    if (st.success && st.data) {
+      var known = ['status', 'testId', 'testName', 'firstName', 'lastName', 'externalId', 'examineeId', 'registrationDate'];
+      var extra = Object.keys(st.data).filter(function (k) { return known.indexOf(k) === -1; });
+      var html = '<dl class="kv">';
+      known.forEach(function (k) { html += kv(k, st.data[k]); });
+      html += '</dl>';
+      if (extra.length) {
+        html += '<h4 style="margin:12px 0 6px">' + esc(t('additional')) + '</h4><dl class="kv">';
+        extra.forEach(function (k) {
+          var v = st.data[k];
+          html += kv(k, (v && typeof v === 'object') ? JSON.stringify(v) : v);
+        });
+        html += '</dl>';
+      }
+      sEl.innerHTML = html;
+    } else {
+      sEl.innerHTML = '<div class="muted-sm">' + esc(t('noData')) + '</div>';
+    }
+
+    // --- E. results data
+    document.getElementById('mvResults').innerHTML = renderResults(rs);
+
+    // --- G. diagnostics
+    if (CAPS.raw) {
+      var diag = '';
+      diag += kv('Normalized Test Code', r.normalizedTestCode, true);
+      diag += kv('Workspace', r.workspace ? r.workspace.name + ' [' + r.workspace.subject + ']' : null);
+      diag += kv('Status endpoint', st.url, true);
+      diag += kv('Results endpoint', rs.url, true);
+      diag += kv('Status HTTP', st.httpCode);
+      diag += kv('Results HTTP', rs.httpCode);
+      diag += kv('Status latency', st.latencyMs != null ? st.latencyMs + ' ms' : null);
+      diag += kv('Results latency', rs.latencyMs != null ? rs.latencyMs + ' ms' : null);
+      diag += kv('Status error body', st.errorBody ? JSON.stringify(st.errorBody) : null);
+      diag += kv('Results error body', rs.errorBody ? JSON.stringify(rs.errorBody) : null);
+      diag += kv('Requested at', r.checkedAt, true);
+      diag += kv('Correlation ID', r.correlationId, true);
+      document.getElementById('mvDiag').innerHTML = diag;
+      document.getElementById('mvRawStatus').textContent = st.data ? JSON.stringify(st.data, null, 2) : '(none)';
+      document.getElementById('mvRawResults').textContent = rs.data ? JSON.stringify(rs.data, null, 2) : '(none)';
+    }
+
+    // --- H. history
+    document.getElementById('mvHist').innerHTML = (r.history || []).map(function (h) {
+      return '<tr>'
+        + '<td style="padding:5px 12px 5px 0" class="mono">' + esc(new Date(h.createdAt).toLocaleString()) + '</td>'
+        + '<td style="padding:5px 12px 5px 0">' + esc(h.by) + '</td>'
+        + '<td style="padding:5px 12px 5px 0">' + esc(h.workspace) + '</td>'
+        + '<td style="padding:5px 12px 5px 0">' + (h.localRecordFound ? badge('b-ok', t('found')) : badge('b-warn', t('notFound'))) + '</td>'
+        + '<td style="padding:5px 12px 5px 0">' + badge(h.statusRequestSuccess ? 'b-ok' : 'b-bad', (h.statusHttpCode || '—') + (h.statusLatencyMs != null ? ' · ' + h.statusLatencyMs + 'ms' : '')) + '</td>'
+        + '<td style="padding:5px 12px 5px 0">' + badge(h.resultsRequestSuccess ? 'b-ok' : 'b-warn', (h.resultsHttpCode || '—') + (h.resultsLatencyMs != null ? ' · ' + h.resultsLatencyMs + 'ms' : '')) + '</td>'
+        + '<td style="padding:5px 0" class="muted-sm">' + esc(h.errorSummary) + '</td>'
+        + '</tr>';
+    }).join('') || '<tr><td colspan="7" class="muted-sm" style="padding:8px 0">—</td></tr>';
   }
 
-  btn.addEventListener('click', verify);
-  document.getElementById('vExam').addEventListener('keydown', function (e) { if (e.key === 'Enter') verify(); });
-  document.getElementById('vCode').addEventListener('keydown', function (e) { if (e.key === 'Enter') verify(); });
+  /** Results payload: top-level fields, every registration result, every score. */
+  function renderResults(rs) {
+    if (!rs.success || !rs.data) return '<div class="muted-sm">' + esc(t('noData')) + '</div>';
+    var d = Array.isArray(rs.data) ? rs.data[0] : rs.data;
+    if (!d) return '<div class="muted-sm">' + esc(t('noData')) + '</div>';
+
+    var html = '<dl class="kv">' + objRows(d) + '</dl>';
+    var list = d.examineeRegistrationResults || d.results || [];
+    if (!Array.isArray(list)) list = [list];
+
+    list.forEach(function (item, i) {
+      if (!item) return;
+      html += '<div class="card" style="margin-top:12px">';
+      html += '<div class="t">Registration result #' + (i + 1) + '</div>';
+      html += '<dl class="kv" style="margin-top:8px">' + objRows(item, ['scores', 'examineeTestScores']) + '</dl>';
+      var scores = item.scores || item.examineeTestScores || [];
+      if (!Array.isArray(scores)) scores = [scores];
+      if (scores.length) {
+        html += '<h4 style="margin:12px 0 6px">' + esc(t('scores')) + '</h4>';
+        scores.forEach(function (sc) {
+          if (!sc) return;
+          html += '<dl class="kv" style="margin-bottom:10px;padding-inline-start:10px;'
+            + 'border-inline-start:2px solid #e2e8f0">' + objRows(sc) + '</dl>';
+        });
+      }
+      html += '</div>';
+    });
+    return html;
+  }
+
+  // ---- diagnostics actions (audited server-side) --------------------------
+  function auditAction(kind) {
+    fetch('/api/manual-verification/audit-export', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind: kind, testCode: lastResult ? lastResult.normalizedTestCode : '' }),
+    }).catch(function () { /* auditing must not block the user's copy */ });
+  }
+  function copyText(text, kind) {
+    navigator.clipboard.writeText(text).then(function () { setHint(esc(t('copied'))); auditAction(kind); });
+  }
+  function diagnosticReport(r) {
+    var st = r.fastTest.status, rs = r.fastTest.results;
+    return [
+      'Manual Verification report',
+      'Test Code (original):   ' + r.originalTestCode,
+      'Test Code (normalized): ' + r.normalizedTestCode,
+      'Workspace:              ' + (r.workspace ? r.workspace.name + ' [' + r.workspace.subject + '] via ' + r.workspace.resolvedBy : 'unresolved'),
+      'Local record:           ' + (r.localRecordFound ? 'found' : 'not found'),
+      'Status endpoint:        ' + (st.url || '-') + ' → HTTP ' + (st.httpCode || '-') + ' in ' + (st.latencyMs != null ? st.latencyMs + 'ms' : '-'),
+      'Results endpoint:       ' + (rs.url || '-') + ' → HTTP ' + (rs.httpCode || '-') + ' in ' + (rs.latencyMs != null ? rs.latencyMs + 'ms' : '-'),
+      'Checked at:             ' + r.checkedAt,
+      'Correlation ID:         ' + r.correlationId,
+      '',
+      'Comparisons:',
+    ].concat((r.comparisons || []).map(function (c) {
+      return '  [' + c.verdict + '] ' + c.label + ' — local=' + (c.local || '-') + ' fastTest=' + (c.fastTest || '-');
+    })).join('\n');
+  }
+
+  // ---- wiring -------------------------------------------------------------
+  document.getElementById('mvGo').addEventListener('click', function () { run(revealed); });
+  document.getElementById('mvCode').addEventListener('keydown', function (e) { if (e.key === 'Enter') run(revealed); });
+  document.getElementById('mvCode').addEventListener('input', function (e) {
+    document.getElementById('mvNorm').textContent = e.target.value.replace(/[-\s]/g, '').toUpperCase() || '—';
+  });
+  document.getElementById('mvClear').addEventListener('click', function () {
+    document.getElementById('mvCode').value = '';
+    document.getElementById('mvNorm').textContent = '—';
+    document.getElementById('mvOut').style.display = 'none';
+    lastResult = null; revealed = false; setHint('');
+  });
+  document.getElementById('mvReveal').addEventListener('click', function () { run(!revealed); });
+  document.getElementById('mvLang').addEventListener('click', function () {
+    lang = lang === 'ar' ? 'en' : 'ar';
+    localStorage.setItem('mvLang', lang);
+    applyLang();
+  });
+  var copyBtn = document.getElementById('mvCopy');
+  if (copyBtn) copyBtn.addEventListener('click', function () {
+    if (lastResult) copyText(JSON.stringify(lastResult, null, 2), 'raw-copy');
+  });
+  var dl = document.getElementById('mvDownload');
+  if (dl) dl.addEventListener('click', function () {
+    if (!lastResult) return;
+    var blob = new Blob([JSON.stringify(lastResult, null, 2)], { type: 'application/json' });
+    var a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = 'verification-' + lastResult.normalizedTestCode + '.json';
+    a.click(); URL.revokeObjectURL(a.href);
+    auditAction('json-download');
+  });
+  var rep = document.getElementById('mvReport');
+  if (rep) rep.addEventListener('click', function () {
+    if (lastResult) copyText(diagnosticReport(lastResult), 'report-copy');
+  });
+
+  // Workspace selector is only offered to admins who may override.
+  if (CAPS.overrideWorkspace) {
+    fetch('/api/manual-verification/workspaces').then(function (r) { return r.json(); }).then(function (d) {
+      var sel = document.getElementById('mvWs');
+      sel.innerHTML = '<option value="">(auto-detect)</option>' + (d.workspaces || []).map(function (w) {
+        return '<option value="' + esc(w.id) + '">' + esc(w.name + ' [' + w.subject + ']') + '</option>';
+      }).join('');
+      document.getElementById('mvWsWrap').style.display = '';
+    }).catch(function () { /* selector stays hidden; auto-detect still works */ });
+  }
+
+  if (!CAPS.execute) {
+    document.getElementById('mvGo').disabled = true;
+    setHint(badge('b-none', t('noPerm')));
+  }
+  applyLang();
 })();
 </script>

@@ -1,3 +1,5 @@
+import { resolveExamTime } from '../lib/exam-time';
+import { env } from '../config/env';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { SYNC_STATUS } from '../lib/enums';
@@ -40,14 +42,18 @@ export const advancedFilterSchema = z.object({
   registrationDateTo: trimmed.optional(),
   actualStartFrom: trimmed.optional(),
   actualStartTo: trimmed.optional(),
+  // Time-of-day window, hour 0-23 in the display timezone. Independent of the
+  // date range: "any day, but started between 08:00 and 10:59".
+  startHourFrom: z.coerce.number().int().min(0).max(23).optional().catch(undefined),
+  startHourTo: z.coerce.number().int().min(0).max(23).optional().catch(undefined),
   examStartFrom: trimmed.optional(),
   examStartTo: trimmed.optional(),
   examEndFrom: trimmed.optional(),
   examEndTo: trimmed.optional(),
-  scoreMin: z.coerce.number().optional(),
-  scoreMax: z.coerce.number().optional(),
-  durationMin: z.coerce.number().int().optional(), // seconds
-  durationMax: z.coerce.number().int().optional(),
+  scoreMin: z.coerce.number().optional().catch(undefined),
+  scoreMax: z.coerce.number().optional().catch(undefined),
+  durationMin: z.coerce.number().int().optional().catch(undefined), // seconds
+  durationMax: z.coerce.number().int().optional().catch(undefined),
   apiError: z.enum(['1', 'true', 'yes']).optional(),
   search: trimmed.optional(),
 });
@@ -55,6 +61,11 @@ export const advancedFilterSchema = z.object({
 export type AdvancedFilter = z.infer<typeof advancedFilterSchema>;
 
 /** Parse & validate an untrusted query object into a clean filter. */
+/**
+ * Parse query-string filters. Malformed values are dropped rather than thrown:
+ * these arrive from hand-edited URLs, stale bookmarks and saved views, and a bad
+ * number should narrow nothing instead of returning a 500 page.
+ */
 export function parseFilter(query: Record<string, unknown>): AdvancedFilter {
   const cleaned: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(query)) {
@@ -118,7 +129,11 @@ export function buildRegistrationWhere(
 
   // Best-effort string date ranges (ISO strings compare lexically).
   pushRange(and, 'fastTestRegistrationDate', f.registrationDateFrom, f.registrationDateTo);
-  pushRange(and, 'actualStartTime', f.actualStartFrom, f.actualStartTo);
+  // Filter the exam-start range on the CONVERTED instant. The raw column holds
+  // FastTest's US-clock string, so a user filtering "started 08:00-10:00" would
+  // otherwise be filtering US hours against a UAE-local intent.
+  pushInstantRange(and, 'actualStartTimeUtc', f.actualStartFrom, f.actualStartTo);
+  pushStartHour(and, f.startHourFrom, f.startHourTo);
   pushRange(and, 'startDate', f.examStartFrom, f.examStartTo);
   pushRange(and, 'endDate', f.examEndFrom, f.examEndTo);
 
@@ -146,9 +161,57 @@ export function buildRegistrationWhere(
   return { AND: and };
 }
 
+/**
+ * Range filter on a real DateTime column, from local wall-clock inputs.
+ *
+ * The user types a UAE-local date/time; the column stores UTC, so the bounds are
+ * converted before comparing. "to" without a time covers the whole day.
+ */
+function pushInstantRange(
+  and: Prisma.ExamRegistrationWhereInput[],
+  field: 'actualStartTimeUtc',
+  from?: string,
+  to?: string,
+) {
+  if (!from && !to) return;
+  const cond: Prisma.DateTimeNullableFilter = {};
+  const bound = (v: string, endOfDay: boolean) => {
+    const hasTime = /[T ]\d{1,2}:\d{2}/.test(v);
+    const raw = hasTime ? v : `${v} ${endOfDay ? '23:59:59' : '00:00:00'}`;
+    const r = resolveExamTime({ raw, sourceTimeZone: env.displayTimezone, displayTimeZone: env.displayTimezone });
+    return r.utc ?? undefined;
+  };
+  if (from) cond.gte = bound(from, false);
+  if (to) cond.lte = bound(to, true);
+  if (cond.gte === undefined && cond.lte === undefined) return;
+  and.push({ [field]: cond } as Prisma.ExamRegistrationWhereInput);
+}
+
+/**
+ * Filter on the hour of day the exam started, in the display timezone.
+ *
+ * Reads the denormalized `actualStartLocalHour` rather than converting in SQL,
+ * because this MySQL has no timezone tables loaded. A range whose end is before
+ * its start wraps around midnight ("21 to 02"), which is expressed as an OR.
+ */
+function pushStartHour(
+  and: Prisma.ExamRegistrationWhereInput[],
+  from?: number,
+  to?: number,
+) {
+  if (from === undefined && to === undefined) return;
+  const lo = from ?? 0;
+  const hi = to ?? 23;
+  if (lo <= hi) {
+    and.push({ actualStartLocalHour: { gte: lo, lte: hi } });
+  } else {
+    and.push({ OR: [{ actualStartLocalHour: { gte: lo } }, { actualStartLocalHour: { lte: hi } }] });
+  }
+}
+
 function pushRange(
   and: Prisma.ExamRegistrationWhereInput[],
-  field: 'fastTestRegistrationDate' | 'actualStartTime' | 'startDate' | 'endDate',
+  field: 'fastTestRegistrationDate' | 'startDate' | 'endDate',
   from?: string,
   to?: string,
 ) {

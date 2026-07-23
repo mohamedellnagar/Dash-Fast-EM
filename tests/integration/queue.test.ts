@@ -3,9 +3,10 @@ import { prisma } from '../../src/db/prisma';
 import {
   enqueue, claimNext, completeJob, failJob, cancelJob, retryJob, requeueDeadLetter,
   retryFailedJobs, recoverStalledJobs, pauseWorkspace, pauseJobType, queueStats,
+  pauseAcademicYear,
 } from '../../src/services/sync/queue.service';
 import { invalidateRateConfig } from '../../src/services/sync/rate-limiter.service';
-import { JOB_TYPE, ERROR_CATEGORY } from '../../src/lib/enums';
+import { JOB_TYPE, ERROR_CATEGORY, JOB_STATUS } from '../../src/lib/enums';
 
 let wsId: string;
 
@@ -127,5 +128,82 @@ describe('Durable queue', () => {
     expect(n).toBeGreaterThanOrEqual(1);
     const stats = await queueStats();
     expect(stats.queued).toBeGreaterThanOrEqual(1);
+  });
+});
+
+describe('Academic-year sync switch', () => {
+  const YEAR = 'TEST-YR-2099';
+
+  async function jobForYear(status = JOB_STATUS.QUEUED) {
+    const { job } = await enqueue({
+      jobType: JOB_TYPE.SYNC_REGISTRATION_STATUS,
+      dedupeKey: `yr-${Math.random()}`,
+      academicYear: YEAR,
+    });
+    if (status !== JOB_STATUS.QUEUED) {
+      await prisma.syncJob.update({ where: { id: job.id }, data: { status } });
+    }
+    return job;
+  }
+
+  beforeEach(async () => {
+    await prisma.syncJob.deleteMany({ where: { academicYear: YEAR } });
+    await pauseAcademicYear(YEAR, false);
+  });
+
+  it('clears the queue for the year, so switching it off is immediate', async () => {
+    await jobForYear();
+    await jobForYear();
+    await jobForYear(JOB_STATUS.RETRY_SCHEDULED);
+
+    const effect = await pauseAcademicYear(YEAR, true, 'tester');
+    expect(effect.cancelled).toBe(3);
+
+    const left = await prisma.syncJob.count({
+      where: { academicYear: YEAR, status: { in: [JOB_STATUS.QUEUED, JOB_STATUS.RETRY_SCHEDULED] } },
+    });
+    expect(left).toBe(0); // the year's queue is zero, not draining
+  });
+
+  it('cancels rather than deletes, so the audit trail survives', async () => {
+    const job = await jobForYear();
+    await pauseAcademicYear(YEAR, true, 'tester');
+    const after = await prisma.syncJob.findUnique({ where: { id: job.id } });
+    expect(after?.status).toBe(JOB_STATUS.CANCELLED);
+    expect(after?.lastErrorCode).toBe('YEAR_SYNC_DISABLED');
+  });
+
+  it('refuses to claim a job belonging to a switched-off year', async () => {
+    await pauseAcademicYear(YEAR, true, 'tester');
+    // A job that slipped in after the pause (scheduler race) must still not run.
+    await jobForYear();
+    expect(await claimNext('w')).toBeNull();
+  });
+
+  it('lets the year run again once switched back on', async () => {
+    await pauseAcademicYear(YEAR, true, 'tester');
+    await jobForYear();
+    expect(await claimNext('w')).toBeNull();
+
+    await pauseAcademicYear(YEAR, false, 'tester');
+    const claimed = await claimNext('w');
+    expect(claimed?.academicYear).toBe(YEAR);
+  });
+
+  it('leaves other years untouched', async () => {
+    const { job: other } = await enqueue({
+      jobType: JOB_TYPE.SYNC_REGISTRATION_STATUS,
+      dedupeKey: `other-${Math.random()}`,
+      academicYear: 'TEST-YR-2098',
+    });
+    await jobForYear();
+    await pauseAcademicYear(YEAR, true, 'tester');
+    const untouched = await prisma.syncJob.findUnique({ where: { id: other.id } });
+    expect(untouched?.status).toBe(JOB_STATUS.QUEUED);
+    await prisma.syncJob.delete({ where: { id: other.id } });
+  });
+
+  it('reports nothing cancelled when switching a year on', async () => {
+    expect(await pauseAcademicYear(YEAR, false, 'tester')).toEqual({ cancelled: 0, stillRunning: 0 });
   });
 });

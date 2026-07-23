@@ -1,6 +1,8 @@
 import { prisma } from '../../db/prisma';
 import { DASHBOARD_STATUS, SYNC_STATUS, toDashboardStatus } from '../../lib/enums';
 import { logger } from '../../lib/logger';
+import { env } from '../../config/env';
+import { resolveExamTime } from '../../lib/exam-time';
 import { FastTestApiError, FastTestClient, fastTestClient } from '../fasttest/client';
 import { parseResults } from '../fasttest/results-mapper';
 import { getWorkspaceById, resolveWorkspaceBySubject, ResolvedWorkspace } from '../workspace.service';
@@ -84,6 +86,10 @@ interface RegDims {
   subjectId: string | null;
   grade: string | null;
   examSubject: string;
+  // Scheduled daily window (source strings). Recovers the AM/PM marker FastTest
+  // drops — see src/lib/exam-time.ts.
+  startTime?: string | null;
+  endTime?: string | null;
 }
 
 interface RegStatusRow {
@@ -166,6 +172,18 @@ async function syncResults(reg: RegDims, ws: ResolvedWorkspace, client: FastTest
   // Primary score = first score row (results-mapper aggregates item counts).
   const primary = parsed.scores[0];
 
+  // FastTest records exam times on a US clock and sends them with no timezone,
+  // so convert to a real instant here — every consumer then reads UTC instead
+  // of re-interpreting a naive string. The raw string is stored alongside.
+  const examTime = resolveExamTime({
+    raw: parsed.startTime,
+    // Per workspace: FastTest's timezone setting differs between them.
+    sourceTimeZone: ws.sourceTimeZone ?? env.fasttest.sourceTimezone,
+    displayTimeZone: env.displayTimezone,
+    windowStart: reg.startTime,
+    windowEnd: reg.endTime,
+  });
+
   await prisma.$transaction(async (tx) => {
     // Replace prior result rows for idempotency.
     const existing = await tx.fastTestResult.findMany({ where: { registrationId }, select: { id: true } });
@@ -185,6 +203,9 @@ async function syncResults(reg: RegDims, ws: ResolvedWorkspace, client: FastTest
         registrationDate: parsed.registrationDate ?? null,
         testName: parsed.testName ?? null,
         startTime: parsed.startTime ?? null,
+        startTimeUtc: examTime.utc,
+        startTimeResolution: examTime.resolution,
+        startTimeSourceTz: examTime.sourceTimeZone,
         secondsUsed: parsed.secondsUsed ?? null,
         passed: parsed.passed ?? null,
         testSessionId: parsed.testSessionId ?? null,
@@ -223,6 +244,9 @@ async function syncResults(reg: RegDims, ws: ResolvedWorkspace, client: FastTest
       data: {
         secondsUsed: parsed.secondsUsed ?? undefined,
         actualStartTime: parsed.startTime ?? undefined,
+        actualStartTimeUtc: examTime.utc,
+        actualStartTimeResolution: examTime.resolution,
+        actualStartLocalHour: examTime.displayHour,
         lastSuccessfulSyncAt: new Date(),
       },
     });

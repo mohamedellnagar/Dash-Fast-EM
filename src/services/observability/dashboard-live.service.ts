@@ -18,12 +18,23 @@ import { getFastTestHealth } from './fasttest-health.service';
  */
 
 const INTERVAL_MS = 2000;
+// A cached frame is only good enough to prime a new viewer while it is fresh.
+// If snapshot computation has been failing, tick() keeps the last good frame —
+// without this bound every new tab would silently be handed arbitrarily old
+// numbers and have no way to tell.
+const MAX_PRIMING_AGE_MS = 10_000;
 const clients = new Set<Response>();
 let timer: NodeJS.Timeout | null = null;
 let lastPayload: string | null = null;
+let lastPayloadAt = 0;
 
-async function computeSnapshot() {
-  const EMPTY = {}; // unscoped global view
+/** Exported for tests: the exact bundle pushed to every connected wall. */
+export async function computeSnapshot() {
+  // Unscoped global view — but soft-deleted registrations are still excluded,
+  // exactly as buildRegistrationWhere() does for every scoped page. Without the
+  // deletedAt guard the wall counted deleted rows and its totals drifted from
+  // every other dashboard.
+  const EMPTY = { deletedAt: null };
   const [overview, subjects, grades, participation, exam, feed, today, queue, control, health, apiHealth, schools] = await Promise.all([
     dash.overview(EMPTY),
     dash.subjectsSummary(EMPTY).then((subjects) => ({ subjects })),
@@ -38,7 +49,10 @@ async function computeSnapshot() {
     dash.apiHealth().catch(() => null),
     dash.schoolsSummary(EMPTY).then((schools) => ({ schools })).catch(() => ({ schools: [] })),
   ]);
-  return { overview, subjects, grades, participation, exam, feed, today, queue, control, health, apiHealth, schools, at: Date.now() };
+  // Exam delivery vs forms/surveys, derived from the subject rows so the wall
+  // never averages a parent questionnaire into the exam completion rate.
+  const byKind = dash.splitByKind(subjects.subjects);
+  return { overview, subjects, byKind, grades, participation, exam, feed, today, queue, control, health, apiHealth, schools, at: Date.now() };
 }
 
 async function tick() {
@@ -50,17 +64,45 @@ async function tick() {
     logger.warn({ err: (e as Error).message }, 'dashboard-live snapshot failed');
     return; // keep last good frame; clients retain their previous view
   }
+  lastPayloadAt = Date.now();
+  // The heavy aggregates are memoized for 15s while the timer ticks every 2s, so
+  // most frames repeat the previous one verbatim. Each frame is ~70 KB and forces
+  // a re-render on every open screen — skip the ones that carry no new
+  // information. (`at` is excluded from the comparison; it always differs.)
+  const unchanged = lastPayload !== null && stripTimestamp(payload) === stripTimestamp(lastPayload);
   lastPayload = payload;
+
+  // Viewers treat a gap in frames as "this screen has gone stale", so a
+  // suppressed tick still has to say "I computed, nothing changed" — otherwise
+  // a quiet system would raise a false alarm.
+  const frame = unchanged ? `event: keepalive\ndata: ${lastPayloadAt}\n\n` : payload;
   for (const res of clients) {
-    try { res.write(payload); } catch { /* dropped on next close event */ }
+    try { res.write(frame); } catch { /* dropped on next close event */ }
   }
+}
+
+/**
+ * A frame's "is this news?" key.
+ *
+ * Three fields are recomputed from now() on every tick and would otherwise make
+ * every frame unique even on a completely idle system: the snapshot's own `at`,
+ * the queue's oldest-job age, and the health window's start. None of them is
+ * rendered on the wall — they are derived clocks, not data — so they are
+ * coarsened here rather than at the source, where other consumers (the queue
+ * page, the Prometheus exporter) legitimately want live millisecond values.
+ */
+function stripTimestamp(frame: string): string {
+  return frame
+    .replace(/,"at":\d+\}/, '}')
+    .replace(/"oldestQueuedAgeMs":(\d+)/, (_m, ms) => `"oldestQueuedAgeMs":${Math.floor(Number(ms) / 30_000)}`)
+    .replace(/"since1h":"[^"]*"/g, '"since1h":""');
 }
 
 function ensureTimer() {
   if (!timer) timer = setInterval(() => void tick(), INTERVAL_MS);
 }
 function maybeStopTimer() {
-  if (timer && clients.size === 0) { clearInterval(timer); timer = null; lastPayload = null; }
+  if (timer && clients.size === 0) { clearInterval(timer); timer = null; lastPayload = null; lastPayloadAt = 0; }
 }
 
 /** Subscribe an SSE response to the shared live snapshot. */
@@ -69,8 +111,11 @@ export function subscribeDashboardLive(res: Response, onClose: () => void): void
   ensureTimer();
   // Send the last computed frame immediately so a new viewer isn't blank until
   // the next tick; otherwise trigger a fresh compute.
-  if (lastPayload) { try { res.write(lastPayload); } catch { /* ignore */ } }
-  else void tick();
+  if (lastPayload && Date.now() - lastPayloadAt <= MAX_PRIMING_AGE_MS) {
+    try { res.write(lastPayload); } catch { /* ignore */ }
+  } else {
+    void tick(); // no frame, or the cached one is too old to be trusted
+  }
   const cleanup = () => {
     clients.delete(res);
     maybeStopTimer();

@@ -51,6 +51,18 @@ function extractFtError(body: any): { code?: string; message?: string } {
   };
 }
 
+/** Outcome of a single read-only lookup, success or failure, with diagnostics. */
+export interface ProbeResult {
+  ok: boolean;
+  data: any;
+  httpCode: number | null;
+  latencyMs: number | null;
+  correlationId: string;
+  url: string; // never contains credentials — the api_token rides in a header
+  requestedAt: Date;
+  error: FastTestApiError | null;
+}
+
 export interface FastTestClientOptions {
   transport?: HttpTransport;
   now?: () => number; // injectable clock for tests
@@ -207,12 +219,55 @@ export class FastTestClient {
   }
 
   private async authedGet(ws: ResolvedWorkspace, path: string, endpointLabel: string): Promise<any> {
-    await assertFastTestNotFrozen();
+    const probe = await this.probeGet(ws, path, endpointLabel);
+    if (!probe.ok) throw probe.error;
+    return probe.data;
+  }
+
+  /**
+   * Same call as authedGet, but returns transport metadata instead of throwing.
+   *
+   * Manual Verification needs the HTTP code, latency and correlation id for BOTH
+   * endpoints even when one of them fails — a 404 on results must not hide a
+   * successful status lookup — so it needs the outcome as a value, not an
+   * exception. Sync keeps using authedGet and its throwing contract.
+   */
+  async probeGet(ws: ResolvedWorkspace, path: string, endpointLabel: string): Promise<ProbeResult> {
     const correlationId = uuid();
+    const startedAt = new Date();
+    try {
+      const { body, res } = await this.authedGetRaw(ws, path, endpointLabel, correlationId);
+      return {
+        ok: true, data: body, httpCode: res.status, latencyMs: res.latencyMs,
+        correlationId, url: this.publicUrl(ws, path), requestedAt: startedAt, error: null,
+      };
+    } catch (e) {
+      const err = e instanceof FastTestApiError
+        ? e
+        : new FastTestApiError(SYNC_ERROR.CONNECTION_FAILURE, (e as Error)?.message ?? 'request failed');
+      return {
+        ok: false, data: null, httpCode: err.httpStatus ?? null, latencyMs: null,
+        correlationId, url: this.publicUrl(ws, path), requestedAt: startedAt, error: err,
+      };
+    }
+  }
+
+  /** Endpoint URL for display. Contains no credentials — auth rides in a header. */
+  private publicUrl(ws: ResolvedWorkspace, path: string): string {
+    return `${ws.baseUrl.replace(/\/$/, '')}${path}`;
+  }
+
+  private async authedGetRaw(
+    ws: ResolvedWorkspace,
+    path: string,
+    endpointLabel: string,
+    correlationId = uuid(),
+  ): Promise<{ body: any; res: HttpResponse & { latencyMs: number } }> {
+    await assertFastTestNotFrozen();
     let token = await this.getToken(ws);
     const url = `${ws.baseUrl.replace(/\/$/, '')}${path}`;
 
-    const doCall = async (): Promise<HttpResponse> => {
+    const doCall = async (): Promise<HttpResponse & { latencyMs: number }> => {
       const requestedAt = new Date();
       const start = this.now();
       const res = await this.transport({
@@ -221,16 +276,17 @@ export class FastTestClient {
         headers: { api_token: token },
         timeoutMs: env.fasttest.requestTimeoutMs,
       });
+      const latencyMs = this.now() - start;
       await this.logRequest({
         workspaceId: ws.workspaceId,
         endpoint: endpointLabel,
         method: 'GET',
         requestedAt,
         res,
-        responseTimeMs: this.now() - start,
+        responseTimeMs: latencyMs,
         correlationId,
       });
-      return res;
+      return { ...res, latencyMs };
     };
 
     let res = await doCall();
@@ -246,7 +302,7 @@ export class FastTestClient {
       const ft = extractFtError(res.body);
       throw new FastTestApiError(classifyError(res), `GET ${endpointLabel} failed`, res.status, ft.code, ft.message);
     }
-    return res.body;
+    return { body: res.body, res };
   }
 
   /** GET /tests/registration/{code}/status */
@@ -269,6 +325,41 @@ export class FastTestClient {
   async getResults(ws: ResolvedWorkspace, testCodeNormalized: string): Promise<any> {
     if (!testCodeNormalized) throw new FastTestApiError(SYNC_ERROR.INVALID_TESTCODE, 'Empty TestCode');
     return this.authedGet(
+      ws,
+      `/tests/registration/${encodeURIComponent(testCodeNormalized)}/results`,
+      '/tests/registration/{code}/results',
+    );
+  }
+
+  /** Non-throwing GET /tests/registration/{code}/status — for diagnostics. */
+  async probeStatus(ws: ResolvedWorkspace, testCodeNormalized: string): Promise<ProbeResult> {
+    const probe = await this.probeGet(
+      ws,
+      `/tests/registration/${encodeURIComponent(testCodeNormalized)}/status`,
+      '/tests/registration/{code}/status',
+    );
+    if (!probe.ok) return probe;
+    // FastTest returns the status as a single-element array; unwrap for display
+    // but keep the unwrapped object — the caller keeps the raw body separately.
+    const unwrapped = Array.isArray(probe.data) ? probe.data[0] : probe.data;
+    if (!unwrapped) {
+      return {
+        ...probe,
+        ok: false,
+        data: null,
+        error: new FastTestApiError(
+          SYNC_ERROR.NOT_FOUND,
+          `No FastTest registration found for ${testCodeNormalized}`,
+          probe.httpCode ?? undefined,
+        ),
+      };
+    }
+    return { ...probe, data: unwrapped };
+  }
+
+  /** Non-throwing GET /tests/registration/{code}/results — for diagnostics. */
+  async probeResults(ws: ResolvedWorkspace, testCodeNormalized: string): Promise<ProbeResult> {
+    return this.probeGet(
       ws,
       `/tests/registration/${encodeURIComponent(testCodeNormalized)}/results`,
       '/tests/registration/{code}/results',

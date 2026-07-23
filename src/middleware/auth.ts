@@ -65,6 +65,27 @@ export function requirePermission(permission: PermissionKey) {
 }
 
 /**
+ * Guard for the unscoped operations walls (Live Overview, Ops Center).
+ *
+ * Those screens are fed by a single shared global snapshot — there is no
+ * per-request school filter to apply — so a school-scoped user opening them
+ * would see every school's data, bypassing their scope. Block them outright
+ * and point them at the scoped dashboards instead.
+ */
+export function requireGlobalScope(req: Request, res: Response, next: NextFunction): void {
+  if (req.principal?.isSchoolScoped) {
+    if (wantsJson(req)) res.status(403).json({ error: 'Forbidden', reason: 'school-scoped users cannot view the global wall' });
+    else res.status(403).render('error', {
+      title: 'Forbidden',
+      message: 'The Live Overview wall shows unfiltered data for all schools. Your account is limited to specific schools — use Live Monitoring or the Schools Dashboard instead.',
+      principal: req.principal,
+    });
+    return;
+  }
+  next();
+}
+
+/**
  * For school-scoped users, return the list of school ids they may see.
  * Returns undefined for unrestricted users (no school filter applied).
  */

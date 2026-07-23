@@ -27,6 +27,16 @@
     .pill{padding:6px 13px;border-radius:999px;font-size:13px;font-weight:600;border:1px solid var(--line);background:var(--surface);white-space:nowrap}
     .pill.on{color:var(--good);border-color:#22c55e55} .pill.off{color:var(--dim)}
     .pill.fast{color:var(--warn);border-color:#f59e0b55}
+    /* A stopped or stale sync is the most important thing on this wall — it must
+       outrank every green tile, not hide in the same dim grey as an idle pill. */
+    .pill.alarm{color:#fca5a5;background:#3b0f0f;border-color:#ef4444aa}
+    .pill.stale{color:#fcd34d;background:#3a2a08;border-color:#f59e0baa}
+    .banner{flex:0 0 auto;display:none;align-items:center;gap:10px;padding:11px 16px;border-radius:12px;
+      font-size:15px;font-weight:700;background:#3b0f0f;border:1px solid #ef4444aa;color:#fecaca}
+    .banner.show{display:flex}
+    .banner.warn{background:#3a2a08;border-color:#f59e0baa;color:#fde68a}
+    .banner .ico{font-size:19px;flex:0 0 auto}
+    .banner .why{font-weight:500;color:inherit;opacity:.85}
     #clock{font-variant-numeric:tabular-nums;font-size:20px;font-weight:700}
     /* ---- BENTO BOARD ---- */
     .board{flex:1 1 auto;display:grid;gap:14px;min-height:0;
@@ -99,6 +109,8 @@
     /* hero completion trend sparkline (compact) */
     .hero .spark{width:100%;height:30px;display:block;margin-top:8px}
     /* daily velocity mini-bars */
+    /* Exam times arrive on FastTest's US clock; name the zone the chart uses. */
+    .velo .tzline{font-size:9.5px;color:var(--dim);margin-top:-2px;flex:0 0 auto;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
     .velo .cap .peak{float:right;font-weight:800;color:var(--dim);text-transform:none;letter-spacing:0}
     .velo .bars{display:flex;align-items:flex-end;gap:3px;flex:1;height:100%;margin-top:6px;min-height:0;
       border-bottom:1px solid #ffffff14}
@@ -159,6 +171,30 @@
     .hcard .l{font-size:12px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.5px}
     .hcard .v{font-size:26px;font-weight:800;margin-top:5px;font-variant-numeric:tabular-nums}
     .hcard .hsub{font-size:11px;color:var(--dim);margin-top:3px}
+
+    /* Scrollable lists cut off mid-row with no hint that more exists. Fade the
+       bottom edge while there is more below, so a clipped row reads as "scroll"
+       instead of as the end of the data. */
+    .scrollable.more{-webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - 22px),transparent);
+                     mask-image:linear-gradient(to bottom,#000 calc(100% - 22px),transparent)}
+    .tile .cap .count{float:right;font-weight:800;color:var(--dim);text-transform:none;letter-spacing:0;font-size:12px}
+    .tile .label .scope{font-weight:600;color:var(--dim);text-transform:none;letter-spacing:0}
+    /* Divider between exam papers and non-assessment instruments in the subject
+       list — without it a 30% parent-survey return rate reads as a failed exam. */
+    .subj .grp{margin:5px 0 2px;padding-top:4px;border-top:1px dashed #ffffff26;
+      font-size:10px;font-weight:800;color:var(--dim);text-transform:uppercase;letter-spacing:.5px}
+    /* The forms group is the point of the split — keep it above the fold rather
+       than pushed into the scroll area where a wall viewer can never reach it. */
+    .subj .list{gap:2px}
+
+    /* ---------- REDUCED MOTION ---------- */
+    /* This wall runs all day in a shared room. Honour the OS setting: drop the
+       pulse and the bar/ring transitions, keeping every colour and value intact. */
+    @media (prefers-reduced-motion: reduce){
+      header .brand .dot{animation:none}
+      .hero .prog>span,.track>span,.segbar>div,.velo .b .bar,
+      .ringg #ringFg,.part .pg .g-fg{transition:none}
+    }
 
     /* ---------- RESPONSIVE ---------- */
     /* Large desktops / laptops: keep the 12-col wall but let rows breathe */
@@ -233,13 +269,16 @@
     <span id="clock">--:--:--</span>
   </header>
 
+  <div class="banner" id="banner" role="status"><span class="ico">⛔</span><span id="bannerText"></span></div>
+
   <section class="board">
     <!-- HERO: Completed -->
     <div class="tile hero a-completed">
-      <div class="label">Completed Exams</div>
+      <div class="label">Completed Exams<span class="scope" id="heroScope"></span></div>
       <div class="val" id="t-completed">—</div>
       <div class="prog"><span id="hero-prog" style="width:0%"></span></div>
       <div class="sub" id="t-completionrate">—</div>
+      <div class="sub" id="t-instruments" style="margin-top:2px"></div>
       <svg class="spark" id="heroSpark" viewBox="0 0 400 52" preserveAspectRatio="none"></svg>
     </div>
 
@@ -264,14 +303,14 @@
 
     <!-- Registration status -->
     <div class="tile status">
-      <div class="cap">Registration Status</div>
+      <div class="cap">Registration Status<span class="count">all registrations · exams + forms</span></div>
       <div class="segbar" id="segbar"></div>
       <div class="seg-legend" id="legend"></div>
     </div>
 
     <!-- Subjects -->
     <div class="tile subj">
-      <div class="cap">Completion by Subject</div>
+      <div class="cap">Completion by Subject<span class="count" id="subjCount"></span></div>
       <div class="list" id="subjects"></div>
     </div>
 
@@ -296,7 +335,7 @@
     <!-- small KPIs -->
     <!-- Participation coverage (targeted vs participating + achieved gauges) -->
     <div class="tile part">
-      <div class="cap">Participation Coverage</div>
+      <div class="cap">Participation Coverage<span class="count" id="partScope"></span></div>
       <div class="prow">
         <span class="pico">🏫</span>
         <div class="pstat"><div class="pn" id="pSchP">—</div><div class="pt">Participating schools</div></div>
@@ -314,25 +353,43 @@
     <!-- Daily velocity (replaces redundant Synced tile) -->
     <div class="tile velo a-completed">
       <div class="cap">⏰ Activity by Hour<span class="peak" id="veloPeak"></span></div>
+      <div class="tzline" id="veloTz"></div>
       <div class="bars" id="veloBars"></div>
     </div>
   </section>
 
   <section class="health">
-    <div class="hcard"><div class="l">API Success</div><div class="v" id="h-api">—</div></div>
-    <div class="hcard"><div class="l">Avg Response</div><div class="v" id="h-resp">—</div></div>
+    <div class="hcard"><div class="l">API Success</div><div class="v" id="h-api">—</div><div class="hsub" id="h-api-sub">last hour</div></div>
+    <div class="hcard"><div class="l">Avg Response</div><div class="v" id="h-resp">—</div><div class="hsub" id="h-resp-sub">last hour</div></div>
     <div class="hcard"><div class="l">⚠ Rapid Completions (&lt;2m)</div><div class="v" id="h-rapid">—</div><div class="hsub" id="h-rapid-sub">needs review</div></div>
     <div class="hcard"><div class="l">Avg Time Used</div><div class="v" id="h-time">—</div></div>
     <div class="hcard"><div class="l">🕒 Stale Data / Errors</div><div class="v" id="h-stale">—</div><div class="hsub" id="h-stale-sub">not synced recently</div></div>
   </section>
 
   <script>
-    var STATUS = [
+    // The four routine states are always shown. The three exception states are
+    // the assessment-integrity ones (a paper pulled for review, a failed review,
+    // an unmapped FastTest status) — they used to be missing entirely, so those
+    // students vanished from the bar while still counting in the total, and the
+    // legend stopped summing to 100%. They now appear as soon as any exist.
+    var STATUS_CORE = [
       {key:'NOT_SYNCED',  name:'Not Synced',  color:'#6b6a63'},
       {key:'NOT_STARTED', name:'Not Started', color:'#3987e5'},
       {key:'IN_PROGRESS', name:'In Progress', color:'#fab219'},
       {key:'COMPLETED',   name:'Completed',   color:'#0ca30c'}
     ];
+    var STATUS_EXCEPTION = [
+      {key:'UNDER_REVIEW',  name:'Under Review',  color:'#a78bfa'},
+      {key:'REVIEW_FAILED', name:'Review Failed', color:'#ef4444'},
+      {key:'UNKNOWN',       name:'Unknown',       color:'#64748b'}
+    ];
+    function statusList(ov){
+      return STATUS_CORE.concat(STATUS_EXCEPTION.filter(function(s){ return (ov[s.key]||0) > 0; }));
+    }
+    // Every string below is built into innerHTML, and school/subject names come
+    // from the FastTest API and Import Center — untrusted. Escape them.
+    var esc = function(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){
+      return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); };
     var fmt = function(n){ return (n==null||isNaN(n)) ? '—' : Number(n).toLocaleString('en-US'); };
     var pct = function(n,d){ return d>0 ? Math.round(n/d*1000)/10 : 0; };
     var ago = function(iso){ if(!iso) return '—'; var s=Math.max(0,(Date.now()-new Date(iso).getTime())/1000);
@@ -364,22 +421,37 @@
       c.style.stroke=col; c.style.strokeDashoffset=(100-Math.max(0,Math.min(100,pct))).toFixed(1);
       if(t){ t.textContent=pct+'%'; t.style.color=col; }
     }
+    // Rewriting innerHTML destroys the user's text selection and forces a full
+    // re-layout — every 2s, whether or not anything changed. Most frames carry
+    // identical rows, so write only when the markup actually differs: an operator
+    // can then select and copy a test code off the wall.
+    function setHTML(el, html){
+      if(!el || el.__html === html) return;
+      el.__html = html; el.innerHTML = html;
+    }
+
+    // Show the fade only while there is content below the fold, and re-check on
+    // scroll and resize — a wall gets resized once and then watched for hours.
+    function markScrollable(el){
+      if(!el) return;
+      el.classList.add('scrollable');
+      var upd=function(){ el.classList.toggle('more', el.scrollHeight - el.scrollTop - el.clientHeight > 4); };
+      if(!el.dataset.scrollWatched){ el.dataset.scrollWatched='1'; el.addEventListener('scroll',upd); window.addEventListener('resize',upd); }
+      upd();
+    }
     function veloBars(items){
-      var box=document.getElementById('veloBars'); if(!box) return; box.innerHTML='';
+      var box=document.getElementById('veloBars'); if(!box) return;
       var max=Math.max.apply(null,items.map(function(i){return i.v;}).concat([1]));
       var avail=Math.max(24,(box.clientHeight||150)-18); // room for the axis label
       // labels collide when bars are narrow — show every Nth only
       var step=Math.ceil(items.length/(Math.max(1,Math.floor((box.clientWidth||400)/30))));
       var peakIdx=items.reduce(function(p,i,n){return i.v>items[p].v?n:p;},0);
-      items.forEach(function(i,idx){
-        var b=document.createElement('div');
-        b.className='b'+(i.v===0?' zero':'')+(idx===peakIdx&&i.v>0?' top':'');
+      setHTML(box, items.map(function(i,idx){
         var hpx=Math.max(2,Math.round(i.v/max*avail));
-        b.innerHTML='<div class="bar" style="height:'+hpx+'px"></div>'+
-          '<div class="bl">'+((idx%step===0)?i.l:'')+'</div>';
-        b.title=i.l+': '+fmt(i.v);
-        box.appendChild(b);
-      });
+        return '<div class="b'+(i.v===0?' zero':'')+(idx===peakIdx&&i.v>0?' top':'')+'" title="'+esc(i.l+':00 — '+fmt(i.v))+'">'+
+          '<div class="bar" style="height:'+hpx+'px"></div>'+
+          '<div class="bl">'+((idx%step===0)?esc(i.l):'')+'</div></div>';
+      }).join(''));
       var pk=document.getElementById('veloPeak');
       if(pk) pk.innerHTML = items[peakIdx].v>0
         ? 'peak <b style="color:#86efac">'+items[peakIdx].l+':00</b> · '+fmt(items[peakIdx].v)
@@ -388,21 +460,31 @@
 
     function refresh(bundle){
       try{
-        var brandDot = document.querySelector('.brand .dot');
         // Data arrives from the shared /api/dashboard/live SSE stream (one set of
         // queries serves every open screen), not per-screen polling.
+        // The brand dot is owned by evaluateTrust() — a snapshot arriving says
+        // nothing about whether the system behind it is actually running.
         var ov=bundle.overview, subj=bundle.subjects, q=bundle.queue, health=bundle.apiHealth,
             exam=bundle.exam, feed=bundle.feed, today=bundle.today, part=bundle.participation,
             gradesData=bundle.grades||{grades:[]};
-        if(!ov){ brandDot.style.background='#d03b3b'; brandDot.style.boxShadow='0 0 10px #d03b3b'; return; }
-        brandDot.style.background='#0ca30c'; brandDot.style.boxShadow='0 0 10px #0ca30c';
+        if(!ov) return;
+        state.lastSyncAt = ov.lastSuccessfulSyncAt || null;
 
         var total = ov.totalRegistered||0;
         var synced = total - (ov.NOT_SYNCED||0);
         // tiles
-        document.getElementById('t-subjects').textContent = fmt(total)+' registrations · '+(subj.subjects?subj.subjects.length:0)+' subjects';
+        // Registrations are not people — a student sits several exams. The unique
+        // student count was already computed server-side but never displayed.
+        document.getElementById('t-subjects').textContent =
+          (ov.studentCount!=null ? fmt(ov.studentCount)+' students · ' : '')
+          + fmt(total)+' registrations · '+(subj.subjects?subj.subjects.length:0)+' subjects';
         // participation coverage + achieved gauges
         if (part) {
+          // "Participating" means sat an exam — a submitted parent questionnaire
+          // is not participation. Say so on the tile so the scope isn't guessed.
+          document.getElementById('partScope').textContent =
+            part.scope === 'EXAM' ? 'sat an exam' : '';
+          document.getElementById('pStuP').title = 'Students with a started/completed EXAM (forms & surveys excluded)';
           document.getElementById('pSchP').textContent = fmt(part.schools.participating);
           document.getElementById('pSchT').textContent = 'of '+fmt(part.schools.targeted);
           document.getElementById('pStuP').textContent = fmt(part.students.participating);
@@ -410,15 +492,31 @@
           gauge('gSch','pSchR',part.schools.rate);
           gauge('gStu','pStuR',part.students.rate);
         }
-        document.getElementById('t-completed').textContent = fmt(ov.COMPLETED);
-        document.getElementById('t-completionrate').textContent = (ov.completionRate!=null?ov.completionRate+'% completion rate':'');
-        document.getElementById('hero-prog').style.width = (ov.completionRate!=null?ov.completionRate:0)+'%';
+        // The hero is titled "Completed Exams", so it counts exams — not the
+        // observation form and parent questionnaire. Blending them reported 86%
+        // when actual exam delivery was 91% and the survey's return rate was 63%.
+        var K = bundle.byKind, ex = K && K.exams, inst = K && K.instruments;
+        var heroN    = ex ? ex.completed      : ov.COMPLETED;
+        var heroRate = ex ? ex.completionRate : ov.completionRate;
+        document.getElementById('t-completed').textContent = fmt(heroN);
+        document.getElementById('heroScope').textContent = ex ? ' · '+ex.subjects+' exam subjects' : '';
+        document.getElementById('t-completionrate').textContent =
+          (heroRate!=null ? heroRate+'% completion rate' : '')
+          + (ex ? ' · of '+fmt(ex.total)+' exam registrations' : '');
+        document.getElementById('t-instruments').textContent =
+          (inst && inst.total)
+            ? '📋 Forms & surveys tracked separately: '+fmt(inst.completed)+' of '+fmt(inst.total)
+              +' ('+inst.completionRate+'%) · not counted above'
+            : '';
+        document.getElementById('hero-prog').style.width = (heroRate!=null?heroRate:0)+'%';
 
         // hero completion trend sparkline + daily velocity bars (from exam analytics)
         var daily = (exam && exam.daily) ? exam.daily : [];
         heroSpark(daily.map(function(d){return d.count||0;}));
         // hour-of-day activity — fill missing hours so the axis always reads 00 → 23
         var hmap={}; ((exam&&exam.byHour)||[]).forEach(function(h){hmap[h.hour]=h.count;});
+        var tzEl=document.getElementById('veloTz'), tz=exam&&exam.timeZone;
+        if(tzEl) tzEl.textContent = tz ? tz.display+' · converted from FastTest '+tz.source : '';
         // trim the dead night hours: chart only the active window (padded by one hour)
         var act=Object.keys(hmap).map(Number).filter(function(h){return hmap[h]>0;});
         var lo=act.length?Math.max(0,Math.min.apply(null,act)-1):0;
@@ -430,36 +528,38 @@
         var tl = document.getElementById('todayList');
         if (today && today.schools) {
           if (!today.schools.length) {
-            tl.innerHTML = '<div class="empty">No student status changes yet today.</div>';
+            setHTML(tl, '<div class="empty">No student status changes yet today.</div>');
           } else {
-            tl.innerHTML = today.schools.map(function(s){
-              var chips = s.grades.map(function(g){ var gr=/grade/i.test(String(g.grade))?g.grade:'Grade '+g.grade; return '<span class="gchip">'+gr+' <b>'+fmt(g.count)+'</b></span>'; }).join('');
-              return '<div class="trow"><span class="snm" title="'+s.schoolName+'">'+s.schoolName+'</span><span class="stot">'+fmt(s.total)+'</span><span class="gchips">'+chips+'</span></div>';
-            }).join('');
+            setHTML(tl, today.schools.map(function(s){
+              var chips = s.grades.map(function(g){ var gr=/grade/i.test(String(g.grade))?g.grade:'Grade '+g.grade; return '<span class="gchip">'+esc(gr)+' <b>'+fmt(g.count)+'</b></span>'; }).join('');
+              return '<div class="trow"><span class="snm" title="'+esc(s.schoolName)+'">'+esc(s.schoolName)+'</span><span class="stot">'+fmt(s.total)+'</span><span class="gchips">'+chips+'</span></div>';
+            }).join(''));
           }
         }
 
         // live sync feed (latest checked codes + status)
         var fl = document.getElementById('syncFeed');
         if (feed && feed.items) {
-          fl.innerHTML = feed.items.map(function(it){
+          setHTML(fl, feed.items.map(function(it){
+            // Status drives a CSS class name — whitelist it instead of escaping.
             var st = String(it.status||'UNKNOWN');
-            return '<div class="frow"><div><div class="code">'+(it.code||'—')+'</div><div class="sub">'+(it.subject||'')+'</div></div>'+
+            if(!/^[A-Z_]+$/.test(st)) st='UNKNOWN';
+            return '<div class="frow"><div><div class="code">'+esc(it.code||'—')+'</div><div class="sub">'+esc(it.subject||'')+'</div></div>'+
               '<span class="st st-'+st+'">'+st.replace(/_/g,' ')+'</span>'+
               '<span class="tm">'+ago(it.at)+'</span></div>';
-          }).join('');
+          }).join(''));
         }
 
         // status segmented bar + legend
-        var seg = document.getElementById('segbar'); var leg = document.getElementById('legend');
-        seg.innerHTML=''; leg.innerHTML='';
-        STATUS.forEach(function(s){
+        var shown = statusList(ov), segHtml='', legHtml='';
+        shown.forEach(function(s){
           var v = ov[s.key]||0; var w = total>0 ? (v/total*100) : 0;
-          var d = document.createElement('div'); d.style.width=w+'%'; d.style.background=s.color; d.title=s.name+': '+fmt(v); seg.appendChild(d);
-          var row=document.createElement('div'); row.className='row';
-          row.innerHTML='<span class="sw" style="background:'+s.color+'"></span><span class="nm">'+s.name+'</span><span class="ct">'+fmt(v)+'</span><span class="pc">'+pct(v,total)+'%</span>';
-          leg.appendChild(row);
+          segHtml += '<div style="width:'+w+'%;background:'+s.color+'" title="'+esc(s.name+': '+fmt(v))+'"></div>';
+          legHtml += '<div class="row"><span class="sw" style="background:'+s.color+'"></span><span class="nm">'+s.name+'</span>'+
+                     '<span class="ct">'+fmt(v)+'</span><span class="pc">'+pct(v,total)+'%</span></div>';
         });
+        setHTML(document.getElementById('segbar'), segHtml);
+        setHTML(document.getElementById('legend'), legHtml);
 
         // sync ring
         var p = pct(synced,total);
@@ -486,28 +586,36 @@
           else { etaEl.textContent='⏱ ETA — · sync idle'; etaEl.style.color='var(--dim)'; }
         }
 
-        // subjects (sorted by total desc, top 8)
-        var sd = document.getElementById('subjects'); sd.innerHTML='';
-        (subj.subjects||[]).slice().sort(function(a,b){return b.total-a.total;}).forEach(function(s){
-          var cr = s.completionRate!=null ? s.completionRate : pct(s.COMPLETED, s.total);
-          var row=document.createElement('div'); row.className='subrow';
-          row.innerHTML='<span class="nm" title="'+s.examSubject+'">'+s.examSubject+'</span>'+
+        function barRow(label, cr){
+          return '<div class="subrow"><span class="nm" title="'+esc(label)+'">'+esc(label)+'</span>'+
             '<span class="track"><span style="width:'+cr+'%"></span></span>'+
-            '<span class="pc">'+cr+'%</span>';
-          sd.appendChild(row);
-        });
+            '<span class="pc">'+cr+'%</span></div>';
+        }
+
+        // Subjects, grouped so exams and non-assessment instruments are never
+        // read off the same scale.
+        var sd = document.getElementById('subjects');
+        var subjRows = (subj.subjects||[]).slice().sort(function(a,b){return b.total-a.total;});
+        var rate = function(s){ return s.completionRate!=null ? s.completionRate : pct(s.COMPLETED, s.total); };
+        var exams  = subjRows.filter(function(s){ return s.kind!=='INSTRUMENT'; });
+        var forms  = subjRows.filter(function(s){ return s.kind==='INSTRUMENT'; });
+        document.getElementById('subjCount').textContent =
+          exams.length + (forms.length ? ' exams · '+forms.length+' forms' : ' total');
+        setHTML(sd,
+          exams.map(function(s){ return barRow(s.examSubject, rate(s)); }).join('')
+          + (forms.length
+              ? '<div class="grp">Forms &amp; surveys — not exams</div>'
+                + forms.map(function(s){ return barRow(s.examSubject, rate(s)); }).join('')
+              : ''));
 
         // completion by grade
-        var gd = document.getElementById('grades'); gd.innerHTML='';
-        ((gradesData&&gradesData.grades)||[]).forEach(function(g){
-          var gr = /grade/i.test(String(g.grade))?g.grade:'Grade '+g.grade;
-          var cr = g.completionRate!=null?g.completionRate:0;
-          var row=document.createElement('div'); row.className='subrow';
-          row.innerHTML='<span class="nm" title="'+gr+'">'+gr+'</span>'+
-            '<span class="track"><span style="width:'+cr+'%"></span></span>'+
-            '<span class="pc">'+cr+'%</span>';
-          gd.appendChild(row);
-        });
+        var gd = document.getElementById('grades');
+        setHTML(gd, ((gradesData&&gradesData.grades)||[]).map(function(g){
+          return barRow(/grade/i.test(String(g.grade))?g.grade:'Grade '+g.grade,
+                        g.completionRate!=null?g.completionRate:0);
+        }).join(''));
+
+        [sd, gd, tl, fl].forEach(markScrollable);
 
         // header pills
         var mp=document.getElementById('modePill');
@@ -520,8 +628,16 @@
         }
 
         // health strip
-        document.getElementById('h-api').textContent = (ov.apiSuccessRate!=null?ov.apiSuccessRate+'%':'—');
-        document.getElementById('h-resp').textContent = (ov.avgResponseTimeMs!=null?ov.avgResponseTimeMs+' ms':'—');
+        // No API traffic in the window is reported as null, not as 100%/0ms —
+        // "nothing happened" must never read as "everything is fine".
+        var calls = ov.apiCallsLastHour;
+        var ha=document.getElementById('h-api'), hrs=document.getElementById('h-resp');
+        ha.textContent  = (ov.apiSuccessRate!=null ? ov.apiSuccessRate+'%' : '—');
+        hrs.textContent = (ov.avgResponseTimeMs!=null ? ov.avgResponseTimeMs+' ms' : '—');
+        ha.style.color = hrs.style.color = (ov.apiSuccessRate==null ? 'var(--dim)' : '');
+        document.getElementById('h-api-sub').textContent =
+          (calls ? fmt(calls)+' calls · last hour' : 'no API traffic in the last hour');
+        document.getElementById('h-resp-sub').textContent = (calls ? 'last hour' : 'no measurement');
         // Rapid completions (<2 min) — integrity flag
         var rapid=(exam&&exam.time)?exam.time.rapidCount:0, rtot=(exam&&exam.time)?exam.time.total:0;
         var hr=document.getElementById('h-rapid'); hr.textContent=fmt(rapid); hr.style.color=rapid>0?'#f87171':'#4ade80';
@@ -548,28 +664,80 @@
     // mode pill from the shared live snapshot's control-state
     function refreshMode(s){
       try{ if(!s) return;
+        state.paused = !!s.globalPaused;
         var mp=document.getElementById('modePill');
-        if(s.globalPaused){ mp.textContent='Sync: PAUSED'; mp.className='pill off'; }
+        if(s.globalPaused){ mp.textContent='⛔ Sync: PAUSED'; mp.className='pill alarm'; }
         else if(s.fastMode){ mp.textContent='Mode: ⚡ FAST'; mp.className='pill fast'; }
         else { mp.textContent='Mode: Normal'; mp.className='pill on'; }
       }catch(e){}
     }
+
+    // ---- Trust banner -------------------------------------------------------
+    // Every tile on this wall renders green when it has nothing to report, so a
+    // dead sync used to look identical to a healthy one. This runs on its own
+    // 1s timer (not on frame arrival) so a stream that silently stops still
+    // raises the alarm instead of freezing the last good picture.
+    var STALE_SYNC_MS = 30*60*1000;   // no successful sync for 30 min
+    var FROZEN_MS     = 15*1000;      // no fresh snapshot for 15s (ticks are 2s)
+    var state = { paused:false, lastSyncAt:null, frameAt:0, recvAt:0, connected:false };
+
+    function evaluateTrust(){
+      var now=Date.now(), stop=[], warn=[];
+      // Frame arrival is the ground truth: a socket can stay "open" while the
+      // server has stopped producing, and onerror may never fire. Age of the
+      // last frame catches both that and an outright disconnect.
+      if(!state.recvAt) stop.push('waiting for the live stream');
+      else if(now-state.recvAt > FROZEN_MS)
+        stop.push('data frozen — no update for '+Math.round((now-state.recvAt)/1000)+'s');
+      else if(!state.connected) stop.push('live stream reconnecting');
+      if(state.paused) stop.push('sync is PAUSED — the numbers below are not moving');
+      var syncAge = state.lastSyncAt ? now-new Date(state.lastSyncAt).getTime() : null;
+      if(syncAge==null) warn.push('no successful sync on record');
+      else if(syncAge > STALE_SYNC_MS) warn.push('last successful sync was '+ago(state.lastSyncAt));
+
+      var b=document.getElementById('banner'), t=document.getElementById('bannerText');
+      var msgs = stop.length ? stop : warn;
+      if(!msgs.length){ b.className='banner'; return; }
+      b.className = 'banner show' + (stop.length ? '' : ' warn');
+      b.querySelector('.ico').textContent = stop.length ? '⛔' : '⚠️';
+      t.innerHTML = esc(msgs[0].charAt(0).toUpperCase()+msgs[0].slice(1))
+        + (msgs.length>1 ? ' <span class="why">· '+esc(msgs.slice(1).join(' · '))+'</span>' : '');
+
+      // The pulsing brand dot is the wall's at-a-glance verdict — keep it honest.
+      var d=document.querySelector('.brand .dot');
+      if(d){ var c = stop.length?'#ef4444':(warn.length?'#fab219':'#0ca30c');
+        d.style.background=c; d.style.boxShadow='0 0 10px '+c; }
+
+      var sp=document.getElementById('syncPill');
+      sp.className = 'pill' + (syncAge!=null && syncAge>STALE_SYNC_MS ? ' stale' : '');
+    }
+    setInterval(evaluateTrust, 1000);
 
     // ---- Single live stream drives every tile (shared across all viewers) ----
     // One SSE connection replaces ~11 polled endpoints; the server computes the
     // snapshot once every 2s and pushes it to all screens.
     (function connectLive(){
       var es = new EventSource('/api/dashboard/live');
+      es.onopen = function(){ state.connected = true; };
+      // Ticks that produced no new data arrive as a keepalive instead of a ~70KB
+      // repeat frame. It carries no content — it only proves the screen is live.
+      es.addEventListener('keepalive', function(){
+        state.connected = true; state.recvAt = Date.now(); evaluateTrust();
+      });
       es.onmessage = function(ev){
         var b; try { b = JSON.parse(ev.data); } catch(e){ return; }
+        state.connected = true;
+        // Freshness is measured from arrival on the client clock — `at` is the
+        // server's clock and skew would produce false alarms. Frames arrive every
+        // 2s, so a gap means the stream really has stopped feeding this screen.
+        state.frameAt = b.at || 0;
+        state.recvAt  = Date.now();
         refresh(b);
         refreshMode(b.control);
         refreshHealth(b.health);
+        evaluateTrust();
       };
-      es.onerror = function(){
-        // EventSource auto-reconnects; dim the brand dot while disconnected.
-        var d=document.querySelector('.brand .dot'); if(d){ d.style.background='#d0a03b'; d.style.boxShadow='0 0 10px #d0a03b'; }
-      };
+      es.onerror = function(){ state.connected = false; evaluateTrust(); }; // EventSource auto-reconnects
     })();
   </script>
 </body>

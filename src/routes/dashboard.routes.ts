@@ -1,7 +1,9 @@
 import { Router, Request } from 'express';
 import { prisma } from '../db/prisma';
+import { env } from '../config/env';
+import { formatInZone } from '../lib/exam-time';
 import { PERMISSION } from '../lib/enums';
-import { requireAuth, requirePermission, schoolScopeFor } from '../middleware/auth';
+import { requireAuth, requirePermission, requireGlobalScope, schoolScopeFor } from '../middleware/auth';
 import { executiveKpis, registrationsBySubject, completionBySchool, RegistrationFilter } from '../services/analytics.service';
 import { parseFilter, buildRegistrationWhere, safeSort, filterToQuery } from '../services/filters';
 import * as dash from '../services/dashboard.service';
@@ -23,12 +25,12 @@ function legacyFilter(req: any): RegistrationFilter {
 
 // Executive dashboard (Phase 1 — unchanged behaviour)
 // Live Overview — in-app page that embeds the wall; full-screen at /wall.
-dashboardRouter.get('/overview', requireAuth, requirePermission(PERMISSION.DASHBOARD_VIEW), async (req, res) => {
+dashboardRouter.get('/overview', requireAuth, requirePermission(PERMISSION.DASHBOARD_VIEW), requireGlobalScope, async (req, res) => {
   res.render('overview-embed', { title: 'Live Overview', principal: req.principal, nav: 'wall' });
 });
 
 // Full-screen live overview wall (self-refreshing via the JSON APIs).
-dashboardRouter.get('/wall', requireAuth, requirePermission(PERMISSION.DASHBOARD_VIEW), async (req, res) => {
+dashboardRouter.get('/wall', requireAuth, requirePermission(PERMISSION.DASHBOARD_VIEW), requireGlobalScope, async (req, res) => {
   res.render('wall', { title: 'Live Overview', principal: req.principal, nav: 'wall' });
 });
 
@@ -192,5 +194,11 @@ dashboardRouter.get('/registrations/:id', requireAuth, requirePermission(PERMISS
 
   const canSeeRaw = req.principal!.permissions.has(PERMISSION.RAW_RESPONSE_VIEW);
   const canUnmaskPii = req.principal!.permissions.has(PERMISSION.PII_UNMASK);
-  res.render('student', { title: 'Student Details', principal: req.principal, reg, canSeeRaw, canUnmaskPii, nav: 'monitoring' });
+  res.render('student', {
+    title: 'Student Details', principal: req.principal, reg, canSeeRaw, canUnmaskPii, nav: 'monitoring',
+    // Exam times are stored as a real instant and rendered on the local clock —
+    // FastTest's own string is on a US clock and would read hours off.
+    displayTimezone: env.displayTimezone,
+    localStart: (r: { actualStartTimeUtc: Date | null }) => formatInZone(r.actualStartTimeUtc, env.displayTimezone),
+  });
 });

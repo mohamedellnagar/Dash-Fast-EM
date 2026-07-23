@@ -162,13 +162,13 @@ async function enqueueBatch(where: any, extra: Partial<{ subject: string }> = {}
       ...(pausedYears.length ? { academicYear: { notIn: pausedYears } } : {}),
       ...where,
     },
-    select: { id: true, workspaceId: true, examName: true, schoolId: true, testCodeNormalized: true },
+    select: { id: true, workspaceId: true, examName: true, schoolId: true, testCodeNormalized: true, academicYear: true },
     take: 2000,
   });
   let n = 0;
   for (const r of regs) {
     if (!r.workspaceId) continue;
-    const res = await enqueue({ jobType: JOB_TYPE.SYNC_REGISTRATION_STATUS, workspaceId: r.workspaceId, registrationId: r.id, subject: r.examName, schoolId: r.schoolId, testCodeNormalized: r.testCodeNormalized, ...extra });
+    const res = await enqueue({ jobType: JOB_TYPE.SYNC_REGISTRATION_STATUS, workspaceId: r.workspaceId, registrationId: r.id, subject: r.examName, schoolId: r.schoolId, testCodeNormalized: r.testCodeNormalized, academicYear: r.academicYear, ...extra });
     if (!res.deduped) n++;
   }
   return n;

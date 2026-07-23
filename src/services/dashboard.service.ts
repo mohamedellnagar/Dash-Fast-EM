@@ -1,6 +1,9 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../db/prisma';
 import { DASHBOARD_STATUS, SYNC_STATUS } from '../lib/enums';
+import { subjectKind, SUBJECT_KIND, INSTRUMENT_PATTERNS } from '../lib/subject-kind';
+import { utcOffsetString } from '../lib/exam-time';
+import { env } from '../config/env';
 
 // ---------------------------------------------------------------------------
 // Phase 2 analytics. Every function takes a pre-built ExamRegistration where
@@ -31,6 +34,11 @@ function memo<T>(key: string, ttlMs: number, fn: () => Promise<T>): Promise<T> {
   return p as Promise<T>;
 }
 const DASH_TTL = 15000;
+
+/** Drop every memoized aggregate. For tests that assert on freshly written data. */
+export function clearDashboardCache(): void {
+  _cache.clear();
+}
 
 /** result where-clause that mirrors the registration filter (single source). */
 function resultWhere(where: Prisma.ExamRegistrationWhereInput): Prisma.FastTestResultWhereInput {
@@ -92,8 +100,23 @@ export async function statusDistribution(where: Prisma.ExamRegistrationWhereInpu
   return { counts, total };
 }
 
-/** Participation coverage: how many of the targeted schools/students actually
- * participated (started the exam). "Participating" = has a started status. */
+/**
+ * SQL predicate excluding non-assessment instruments, built from the same
+ * pattern list the in-memory classifier uses so the two cannot drift apart.
+ */
+const EXAMS_ONLY_SQL = Prisma.sql`AND ${Prisma.join(
+  INSTRUMENT_PATTERNS.map((p) => Prisma.sql`r.examSubject NOT LIKE ${`%${p}%`}`),
+  ' AND ',
+)}`;
+
+/**
+ * Participation coverage: how many of the targeted schools/students actually
+ * sat an exam. "Participating" = has a started status on an EXAM.
+ *
+ * Scoped to exams deliberately. Counting every registration meant a student who
+ * only had a parent questionnaire submitted on their behalf was reported as
+ * participating, overstating coverage by students who never sat a paper.
+ */
 export function participationCoverage(programType?: string, subjects?: string[]) {
   return memo(`participation:${programType ?? ''}:${(subjects ?? []).join(',')}`, DASH_TTL,
     () => participationCoverageUncached(programType, subjects));
@@ -108,11 +131,12 @@ async function participationCoverageUncached(programType?: string, subjects?: st
       COUNT(DISTINCT r.emiratesId) tst,
       COUNT(DISTINCT CASE WHEN r.dashboardStatus IN ('COMPLETED','IN_PROGRESS','UNDER_REVIEW','REVIEW_FAILED') THEN r.emiratesId END) pst
     FROM ExamRegistration r
-    WHERE r.deletedAt IS NULL ${prog} ${subj}`;
+    WHERE r.deletedAt IS NULL ${prog} ${subj} ${EXAMS_ONLY_SQL}`;
   const r = rows[0] ?? { ts: 0n, ps: 0n, tst: 0n, pst: 0n };
   const ts = Number(r.ts), ps = Number(r.ps), tst = Number(r.tst), pst = Number(r.pst);
   const rate = (a: number, b: number) => (b > 0 ? Math.round((a / b) * 100) : 0);
   return {
+    scope: SUBJECT_KIND.EXAM, // forms/surveys excluded — see the doc comment above
     schools: { targeted: ts, participating: ps, rate: rate(ps, ts) },
     students: { targeted: tst, participating: pst, rate: rate(pst, tst) },
   };
@@ -120,7 +144,11 @@ async function participationCoverageUncached(programType?: string, subjects?: st
 
 /** Schools whose students' statuses changed TODAY, with the grades touched per
  * school. Powers the "Today's Activity" panel on the operations wall. */
-export async function todaysActivity(where: Prisma.ExamRegistrationWhereInput) {
+/** Cached with the other registration aggregates so the wall's tiles agree. */
+export function todaysActivity(where: Prisma.ExamRegistrationWhereInput) {
+  return memo('today:' + JSON.stringify(where), DASH_TTL, () => todaysActivityUncached(where));
+}
+async function todaysActivityUncached(where: Prisma.ExamRegistrationWhereInput) {
   const start = new Date(); start.setHours(0, 0, 0, 0);
   const rows = await prisma.examRegistration.groupBy({
     by: ['schoolId', 'grade'],
@@ -175,14 +203,18 @@ async function overviewUncached(where: Prisma.ExamRegistrationWhereInput) {
     prisma.fastTestWorkspace.findFirst({ where: { lastSuccessfulSyncAt: { not: null } }, orderBy: { lastSuccessfulSyncAt: 'desc' }, select: { lastSuccessfulSyncAt: true } }),
     countDistinctStudents(where),
   ]);
+  // No calls in the window is NOT a perfect score. Returning 100% / 0 ms made
+  // the wall read "healthy" precisely when the sync had stopped making requests
+  // at all, so absence of traffic is reported as null and rendered as "—".
   const apiTotal = apiAgg._count._all || 0;
-  const apiSuccessRate = apiTotal ? round2(((apiTotal - apiErrors) / apiTotal) * 100) : 100;
+  const apiSuccessRate = apiTotal ? round2(((apiTotal - apiErrors) / apiTotal) * 100) : null;
   return {
     ...kpis,
     studentCount, // unique students (by Emirates ID) — one student may sit many exams
     apiErrors,
+    apiCallsLastHour: apiTotal,
     apiSuccessRate,
-    avgResponseTimeMs: Math.round(apiAgg._avg.responseTimeMs ?? 0),
+    avgResponseTimeMs: apiTotal && apiAgg._avg.responseTimeMs != null ? Math.round(apiAgg._avg.responseTimeMs) : null,
     lastSuccessfulSyncAt: lastSync?.lastSuccessfulSyncAt ?? null,
   };
 }
@@ -296,13 +328,43 @@ async function subjectsSummaryUncached(where: Prisma.ExamRegistrationWhereInput)
     row.total += g._count._all;
   }
   return [...acc.values()]
-    .map((r) => ({ ...r, completionRate: r.total ? Math.round((r.COMPLETED / r.total) * 100) : 0 }))
+    .map((r) => ({
+      ...r,
+      // Exams vs non-assessment instruments (observation form, parent survey) —
+      // consumers must not average the two together. See lib/subject-kind.
+      kind: subjectKind(r.examSubject),
+      completionRate: r.total ? Math.round((r.COMPLETED / r.total) * 100) : 0,
+    }))
     .sort((a, b) => b.total - a.total);
+}
+
+/**
+ * Split the per-subject rows into exam delivery vs non-assessment instruments.
+ * Derived from subjectsSummary(), so it costs no extra query and always agrees
+ * with the per-subject list on screen.
+ */
+export function splitByKind(rows: Array<{ examSubject: string; total: number; COMPLETED?: number; kind?: string }>) {
+  const bucket = (kind: string) => {
+    const of = rows.filter((r) => (r.kind ?? subjectKind(r.examSubject)) === kind);
+    const total = of.reduce((n, r) => n + r.total, 0);
+    const completed = of.reduce((n, r) => n + (r.COMPLETED ?? 0), 0);
+    return { subjects: of.length, total, completed, completionRate: total ? round2((completed / total) * 100) : null };
+  };
+  return { exams: bucket(SUBJECT_KIND.EXAM), instruments: bucket(SUBJECT_KIND.INSTRUMENT) };
 }
 
 // ---- generic dimension breakdowns ----------------------------------------
 
-export async function completionByGrade(where: Prisma.ExamRegistrationWhereInput) {
+/**
+ * Memoized alongside overview()/subjectsSummary() so the wall's registration
+ * tiles all describe the same moment. When this one was computed live while
+ * overview() served a 15s-old cache, the grade bars and the headline counts
+ * could disagree on screen.
+ */
+export function completionByGrade(where: Prisma.ExamRegistrationWhereInput) {
+  return memo('grades:' + JSON.stringify(where), DASH_TTL, () => completionByGradeUncached(where));
+}
+async function completionByGradeUncached(where: Prisma.ExamRegistrationWhereInput) {
   const grouped = await prisma.examRegistration.groupBy({ by: ['grade', 'dashboardStatus'], where, _count: { _all: true } });
   const acc = new Map<string, { grade: string; total: number; completed: number }>();
   for (const g of grouped) {
@@ -351,6 +413,7 @@ async function examOperationalAnalyticsUncached(programType?: string, subjects?:
   const prog = programType ? Prisma.sql`AND r.programType = ${programType}` : Prisma.empty;
   const subj = subjects && subjects.length ? Prisma.sql`AND r.examSubject IN (${Prisma.join(subjects)})` : Prisma.empty;
 
+  const displayOffset = utcOffsetString(env.displayTimezone);
   const [timeBuckets, rapid, byHour, daily] = await Promise.all([
     prisma.$queryRaw<Array<{ label: string; ord: number; n: bigint }>>`
       SELECT CASE
@@ -373,14 +436,17 @@ async function examOperationalAnalyticsUncached(programType?: string, subjects?:
       FROM FastTestResult fr JOIN ExamRegistration r ON r.id = fr.registrationId
       WHERE fr.secondsUsed IS NOT NULL AND r.deletedAt IS NULL ${prog} ${subj}`,
     prisma.$queryRaw<Array<{ h: number; n: bigint }>>`
-      SELECT HOUR(fr.startTime) h, COUNT(*) n
+      -- Time-of-day buckets read the CONVERTED instant, not the vendor's naive
+      -- string: FastTest records on a US clock, so HOUR(fr.startTime) reported a
+      -- US hour on a dashboard read in the UAE.
+      SELECT HOUR(CONVERT_TZ(fr.startTimeUtc, '+00:00', ${displayOffset})) h, COUNT(*) n
       FROM FastTestResult fr JOIN ExamRegistration r ON r.id = fr.registrationId
-      WHERE fr.startTime IS NOT NULL AND r.deletedAt IS NULL ${prog} ${subj}
+      WHERE fr.startTimeUtc IS NOT NULL AND r.deletedAt IS NULL ${prog} ${subj}
       GROUP BY h ORDER BY h`,
     prisma.$queryRaw<Array<{ d: string; n: bigint }>>`
-      SELECT DATE_FORMAT(fr.startTime, '%Y-%m-%d') d, COUNT(*) n
+      SELECT DATE_FORMAT(CONVERT_TZ(fr.startTimeUtc, '+00:00', ${displayOffset}), '%Y-%m-%d') d, COUNT(*) n
       FROM FastTestResult fr JOIN ExamRegistration r ON r.id = fr.registrationId
-      WHERE fr.startTime IS NOT NULL AND r.deletedAt IS NULL ${prog} ${subj}
+      WHERE fr.startTimeUtc IS NOT NULL AND r.deletedAt IS NULL ${prog} ${subj}
       GROUP BY d ORDER BY d DESC LIMIT 45`,
   ]);
 
@@ -394,6 +460,8 @@ async function examOperationalAnalyticsUncached(programType?: string, subjects?:
     },
     byHour: byHour.map((h) => ({ hour: Number(h.h), count: Number(h.n) })),
     daily: daily.map((d) => ({ date: String(d.d), count: Number(d.n) })).reverse(),
+    // Which clock these buckets are stated in, so the wall can label them.
+    timeZone: { display: env.displayTimezone, source: env.fasttest.sourceTimezone },
   };
 }
 

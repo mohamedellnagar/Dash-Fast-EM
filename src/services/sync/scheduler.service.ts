@@ -142,6 +142,7 @@ export async function enqueueDueJobs(now: () => number = () => Date.now(), limit
   };
   const select = {
     id: true, workspaceId: true, examName: true, schoolId: true, testCodeNormalized: true,
+    academicYear: true,
     dashboardStatus: true, startDate: true, endDate: true, lastSuccessfulSyncAt: true, nextSyncAt: true, unchangedPolls: true,
     _count: { select: { results: true } },
   } as const;
@@ -193,6 +194,7 @@ export async function enqueueDueJobs(now: () => number = () => Date.now(), limit
       testCodeNormalized: reg.testCodeNormalized,
       subject: reg.examName,
       schoolId: reg.schoolId,
+      academicYear: reg.academicYear,
     }));
     if (res.deduped) deduped++;
     else enqueued++;

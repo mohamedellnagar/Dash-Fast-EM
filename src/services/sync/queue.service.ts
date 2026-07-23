@@ -21,12 +21,17 @@ function ttlCache<T>(fn: () => Promise<T>, ttlMs: number) {
   let value: T | undefined;
   let at = 0;
   let inflight: Promise<T> | null = null;
-  return async (now: () => number = () => Date.now()): Promise<T> => {
+  const get = async (now: () => number = () => Date.now()): Promise<T> => {
     if (value !== undefined && now() - at < ttlMs) return value;
     if (inflight) return inflight;
     inflight = fn().then((v) => { value = v; at = now(); inflight = null; return v; }).catch((e) => { inflight = null; throw e; });
     return inflight;
   };
+  // Pause/resume must take effect on the very next claim. Without this an
+  // operator switching something off watched it keep syncing for the TTL and
+  // reasonably concluded the control was broken.
+  get.invalidate = () => { value = undefined; at = 0; };
+  return get;
 }
 
 export interface EnqueueInput {
@@ -37,6 +42,8 @@ export interface EnqueueInput {
   testCodeNormalized?: string | null;
   subject?: string | null;
   schoolId?: string | null;
+  /** Denormalized so a paused year can be enforced at claim time. */
+  academicYear?: string | null;
   payload?: Record<string, unknown> | null;
   dedupeKey?: string | null;
   maxAttempts?: number;
@@ -64,6 +71,7 @@ export async function enqueue(input: EnqueueInput): Promise<{ job: any; deduped:
       testCodeNormalized: input.testCodeNormalized ?? null,
       subject: input.subject ?? null,
       schoolId: input.schoolId ?? null,
+      academicYear: input.academicYear ?? null,
       payload: input.payload ? JSON.stringify(input.payload) : null,
       dedupeKey,
       maxAttempts: input.maxAttempts ?? env.sync.maxRetries,
@@ -93,7 +101,8 @@ async function pausedSetsUncached() {
   const controls = await prisma.queueControl.findMany({ where: { paused: true } });
   const workspaces = new Set(controls.filter((c) => c.scope === 'WORKSPACE').map((c) => c.scopeKey));
   const jobTypes = new Set(controls.filter((c) => c.scope === 'JOB_TYPE').map((c) => c.scopeKey));
-  return { workspaces, jobTypes };
+  const academicYears = new Set(controls.filter((c) => c.scope === 'ACADEMIC_YEAR').map((c) => c.scopeKey));
+  return { workspaces, jobTypes, academicYears };
 }
 const pausedSets = ttlCache(pausedSetsUncached, CONTROL_TTL_MS);
 
@@ -118,7 +127,9 @@ export async function claimNext(workerId: string, now: () => number = () => Date
   const globalRunning = await prisma.syncJob.count({ where: { status: JOB_STATUS.RUNNING } });
   if (globalRunning >= env.sync.globalMaxConcurrent) return null;
 
-  const { workspaces: pausedWs, jobTypes: pausedJt } = await pausedSets();
+  // A year switched OFF must stop work already in the queue, not just stop new
+  // scheduling — otherwise a large backlog keeps syncing a closed year for hours.
+  const { workspaces: pausedWs, jobTypes: pausedJt, academicYears: pausedYears } = await pausedSets();
 
   // Fetch a wider window of due jobs than one worker needs so ~20 concurrent
   // claimers target different rows (shuffled below) instead of fighting over the
@@ -158,6 +169,7 @@ export async function claimNext(workerId: string, now: () => number = () => Date
   const eligible = candidates
     .filter((c) => !pausedJt.has(c.jobType))
     .filter((c) => !(c.workspaceId && pausedWs.has(c.workspaceId)))
+    .filter((c) => !(c.academicYear && pausedYears.has(c.academicYear)))
     .sort((a, b) => (runningByWs.get(a.workspaceId ?? '_') ?? 0) - (runningByWs.get(b.workspaceId ?? '_') ?? 0));
 
   for (const cand of eligible) {
@@ -300,6 +312,7 @@ export async function pauseWorkspace(workspaceId: string, paused: boolean, by?: 
     }),
     prisma.fastTestWorkspace.update({ where: { id: workspaceId }, data: { syncPaused: paused } }),
   ]);
+  pausedSets.invalidate();
 }
 
 export async function pauseJobType(jobType: string, paused: boolean, by?: string): Promise<void> {
@@ -308,6 +321,7 @@ export async function pauseJobType(jobType: string, paused: boolean, by?: string
     create: { scope: 'JOB_TYPE', scopeKey: jobType, paused, updatedBy: by },
     update: { paused, updatedBy: by },
   });
+  pausedSets.invalidate();
 }
 
 // --- fast (turbo) sync mode ---
@@ -388,6 +402,7 @@ export async function pauseSubject(examSubject: string, paused: boolean, by?: st
     create: { scope: 'SUBJECT', scopeKey: examSubject, paused, updatedBy: by },
     update: { paused, updatedBy: by },
   });
+  pausedSets.invalidate();
 }
 
 /** ExamSubjects currently paused (excluded from scheduling). */
@@ -410,13 +425,44 @@ export async function getSubjectSyncControls(): Promise<Array<{ examSubject: str
 
 // --- per-academic-year sync control ---
 
-/** Enable/disable sync for a whole academic year. */
-export async function pauseAcademicYear(academicYear: string, paused: boolean, by?: string): Promise<void> {
+/**
+ * Turn sync on/off for a whole academic year.
+ *
+ * Switching a year OFF also CANCELS everything already queued for it, so the
+ * year's queue drops to zero instead of draining for hours. Cancelled jobs are
+ * kept (not deleted) for audit, and dedup only considers active statuses, so
+ * switching the year back ON lets the scheduler re-create them normally.
+ *
+ * Jobs already RUNNING are left to finish their in-flight request — they
+ * complete in under a second and killing them mid-write risks a partial record.
+ * The count is returned so the caller can report it.
+ */
+export async function pauseAcademicYear(
+  academicYear: string,
+  paused: boolean,
+  by?: string,
+): Promise<{ cancelled: number; stillRunning: number }> {
   await prisma.queueControl.upsert({
     where: { scope_scopeKey: { scope: 'ACADEMIC_YEAR', scopeKey: academicYear } },
     create: { scope: 'ACADEMIC_YEAR', scopeKey: academicYear, paused, updatedBy: by },
     update: { paused, updatedBy: by },
   });
+  pausedSets.invalidate();
+  if (!paused) return { cancelled: 0, stillRunning: 0 };
+
+  const { count } = await prisma.syncJob.updateMany({
+    where: { academicYear, status: { in: [JOB_STATUS.QUEUED, JOB_STATUS.RETRY_SCHEDULED] } },
+    data: {
+      status: JOB_STATUS.CANCELLED,
+      completedAt: new Date(),
+      lastErrorCode: 'YEAR_SYNC_DISABLED',
+      lastErrorMessage: `Academic year ${academicYear} was switched off`,
+      lockedBy: null,
+      lockedAt: null,
+    },
+  });
+  const stillRunning = await prisma.syncJob.count({ where: { academicYear, status: JOB_STATUS.RUNNING } });
+  return { cancelled: count, stillRunning };
 }
 
 /** Academic years currently paused (excluded from scheduling). */
