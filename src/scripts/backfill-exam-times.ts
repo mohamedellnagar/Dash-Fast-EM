@@ -8,11 +8,16 @@
  * after changing FASTTEST_SOURCE_TZ, or once FastTest starts returning an
  * unambiguous clock.
  *
- *   npx ts-node --transpile-only scripts/backfill-exam-times.ts [--dry-run] [--batch=1000]
+ * Lives under src/ so it is compiled into the production image — the runtime
+ * image installs no dev dependencies, so a ts-node script under scripts/ could
+ * never run on the server where this is actually needed.
+ *
+ *   npm run backfill:exam-times -- --dry-run
+ *   npm run backfill:exam-times
  */
-import { prisma } from '../src/db/prisma';
-import { env } from '../src/config/env';
-import { resolveExamTime, offsetHoursBetween, zoneObservesDst } from '../src/lib/exam-time';
+import { prisma } from '../db/prisma';
+import { env } from '../config/env';
+import { resolveExamTime, offsetHoursBetween, zoneObservesDst } from '../lib/exam-time';
 
 const args = process.argv.slice(2);
 const DRY_RUN = args.includes('--dry-run');

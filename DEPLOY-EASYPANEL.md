@@ -61,6 +61,14 @@ Required for production (set on **both** web and worker):
 | `BOOTSTRAP_ADMIN_EMAIL` | your admin email | first-login account |
 | `BOOTSTRAP_ADMIN_PASSWORD` | strong password | **change from the default** |
 
+Timezones (defaults suit a UAE deployment):
+
+| Variable | Default | Notes |
+|---|---|---|
+| `DISPLAY_TZ` | `Asia/Dubai` | zone every exam time is shown in |
+| `FASTTEST_SOURCE_TZ` | `America/Chicago` | fallback only — the real setting is **per workspace** in Integration Settings, because FastTest's timezone differs between workspaces |
+| `SYNC_TZ` | `Asia/Dubai` | zone the daily sync window is evaluated in |
+
 Optional (sensible defaults exist): `SYNC_ENABLED`, `SCHEDULER_ENABLED`,
 `LOG_LEVEL`, `FASTTEST_*` rate/timeout tuning. See `.env.example` for the full list.
 FastTest workspaces/API keys are configured **in-app** (Integration Settings), not via env.
@@ -82,5 +90,51 @@ FastTest workspaces/API keys are configured **in-app** (Integration Settings), n
 
 ## Updating
 
-Push to `main` → redeploy the `web` and `worker` services in EasyPanel. Migrations
-apply automatically on start.
+Push to `main` → GitHub Actions builds the image → redeploy the `web` and
+`worker` services in EasyPanel. Migrations apply automatically on start.
+
+Order matters when both services run: redeploy **`web` first** (it applies the
+migrations), then `worker`.
+
+### After upgrading to v0.2.0 — exam timezones
+
+v0.2.0 converts FastTest's exam timestamps to local time. FastTest records them
+on a US clock and sends them with no timezone, and **the setting differs per
+workspace** — verified against their portal, some record in UTC and some in US
+Central. Two steps are needed once, after the deploy:
+
+**1. Set each workspace's source zone**
+
+Integration Settings → *Exam-time source* column. For the current estate:
+
+| Workspace | Source zone |
+|---|---|
+| Math, Arabic | `UTC` |
+| Baseline, English | `America/Chicago` |
+
+Confirm a value by opening any Test Code in the FastTest portal and comparing
+its *Time Started* with what Manual Verification shows for the same code.
+
+**2. Convert the stored history**
+
+New syncs convert automatically; rows synced before the upgrade do not. In the
+**web** service console:
+
+```
+npm run backfill:exam-times -- --dry-run   # review the outcome first
+npm run backfill:exam-times                # apply
+```
+
+Reads only the vendor strings already stored — it makes **no FastTest API
+calls** — and takes roughly 3 minutes for ~70k rows. It is idempotent: re-run it
+any time a workspace's source zone changes.
+
+Until it runs, Activity-by-Hour is empty and *Actual Start* shows `—` for older
+records. Nothing is lost: the original vendor string is never overwritten, so
+the conversion can be redone or corrected at any point.
+
+### Behaviour change in v0.2.0
+
+Switching an academic year **OFF** now cancels everything queued for it, so the
+queue drops to zero immediately. Previously the backlog kept draining. The UI
+asks for confirmation and reports how many jobs were cancelled.

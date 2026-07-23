@@ -18,6 +18,7 @@
     "prisma:deploy": "prisma migrate deploy",
     "db:reset": "prisma migrate reset --force",
     "db:seed": "ts-node --transpile-only prisma/seed.ts",
+    "backfill:exam-times": "node dist/scripts/backfill-exam-times.js",
     "pretest": "bash scripts/prepare-test-db.sh",
     "test": "vitest run",
     "test:watch": "vitest",
